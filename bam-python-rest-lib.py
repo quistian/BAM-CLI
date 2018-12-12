@@ -362,8 +362,10 @@ API call:
 
     filters: List of properties on which the search is based.
              Valid format is: name=value, name2=value2
+
     type: The object type that you wish to search. The type cannot be null or empty string ""
           This must be one for the following object types:
+
         * IP4Block
         * IP4Network
         * IP4Addr
@@ -382,6 +384,21 @@ API Example:
 Returns an array of entities matching the keyword text and
 the category type, or returns an empty array.
 
+E.g.
+
+[
+    {'id': 2429335, 'name': '',
+      'properties': 'ttl=86400|absoluteName=theta.utoronto.ca|linkedRecordName=alt2.aspmx.l.google.com|priority=5|',
+      'type': 'MXRecord'},
+    {'id': 2429340, 'name': '',
+      'properties': 'ttl=86400|absoluteName=lcd.utoronto.ca|linkedRecordName=aspmx3.googlemail.com|priority=10|',
+      'type': 'MXRecord'},
+    {'id': 2429341, 'name': '',
+      'properties': 'ttl=86400|absoluteName=lcd.utoronto.ca|linkedRecordName=aspmx2.googlemail.com|priority=10|',
+      'type': 'MXRecord'}
+]
+
+
 '''
 
 
@@ -393,7 +410,7 @@ def custom_search(filters, typ, start, stop):
             'stop': stop,
             'options': options,
             'type': typ,
-            'filters': ['ttl=86400'],
+            'filters': filters,
     }
     req = requests.get(URL, headers=AuthHeader, params=param_list)
     return req.json()
@@ -427,14 +444,17 @@ Parameter Description:
 
 def search_by_category(keyword, category, start, stop):
     URL = BaseURL + 'searchByCategory'
+
     param_list = {
         'keyword': keyword,
         'category': category,
-        'start': 0,
-        'count': 2000
+        'start': start,
+        'count': stop
     }
+
     req = requests.get(URL, headers=AuthHeader, params=param_list)
     return req.json()
+
 
 '''
 
@@ -759,19 +779,14 @@ def test_get_parent():
 
 # Tests for Searching for and Retrieving Entities
 
-def test_search_custom():
-    vars = custom_search('MXRecord', '', 0, 50)
+def test_custom_search():
+    filters = ['ttl=86400']
+    vars = custom_search(filters, 'MXRecord', 0, 25)
     pprint(vars)
-    for var in vars:
-        for k in var:
-            print(k, var[k])
-        print()
-    vars = custom_search('HostRecord', '', 0, 50)
+
+    filters = ['recordType=A', 'rdata=128.100.103*']
+    vars = custom_search(filters, 'GenericRecord', 0, 15)
     pprint(vars)
-    for var in vars:
-        for k in var:
-            print(k, var[k])
-        print()
 
 #
 # is_zone takes a name/fqdn as input and returns: False
@@ -838,11 +853,12 @@ def test_generic_methods():
     test_get_parent()
 
 def test_search_functions():
-    test_search_custom()
+    test_custom_search()
+    test_category_search()
 
 
-def qwe():
-    entities = search_by_category('utoronto', Categories['resourceRecords'], 0, 10)
+def test_category_search():
+    entities = search_by_category('utoronto', Categories['resourceRecords'], 0, 20)
     for entity in entities:
         for k, val in entity.items():
             if val is None or val == 'ExternalHostRecord':
@@ -852,6 +868,8 @@ def qwe():
                 vals = get_entity_by_id(val)
                 print('get_entity_by_id', id, vals)
         print()
+        
+def qwe():
     types = 'View,Zone,HostRecord,GenericRecord'
     types = 'Configuration,View'
     vars = search_by_object_types('test', types, 0, 100)
