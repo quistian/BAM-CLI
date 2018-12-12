@@ -2,7 +2,6 @@
 
 # vim: tabstop=8 expandtab shiftwidth=4 softtabstop=4
 
-
 '''
 
 RESTful Python API for BAM
@@ -110,24 +109,24 @@ Categories = {
     'all': 'ALL',
     'admin': 'ADMIN',
     'Configuration': 'CONFIGURATION',
-    'deploymentOption': 'DEPLOYMENT_oPTIONS',
-    'deploymentRoles': 'DEPLOYMENT_rOLES',
-    'deploymentSchedulers': 'DEPLOYMENT_sCHEDULER',
-    'dhcpClassObjects': 'DHCPCLASSES_oBJECTS',
-    'dhcpNACPolicies': 'DHCPNACPOLICY_oBJECTS',
-    'IP4Objects': 'IP4_oBJECTS',
-    'IP6Objects': 'IP6_oBJECTS',
-    'MACPoolObjects': 'MACPOOL_oBJECTS',
-    'resourceRecords': 'RESOURCE_rECORD',
+    'deploymentOptions': 'DEPLOYMENT_OPTIONS',
+    'deploymentRoles': 'DEPLOYMENT_ROLES',
+    'deploymentSchedulers': 'DEPLOYMENT_SCHEDULERS',
+    'dhcpClassObjects': 'DHCPCLASSES_OBJECTS',
+    'dhcpNACPolicies': 'DHCPNACPOLICY_OBJECTS',
+    'IP4Objects': 'IP4_OBJECTS',
+    'IP6Objects': 'IP6_OBJECTS',
+    'MACPoolObjects': 'MACPOOL_OBJECTS',
+    'resourceRecords': 'RESOURCE_RECORD',
     'servers': 'SERVERS',
     'tags': 'TAGS',
     'tasks': 'TASKS',
-    'TFTPObjects': 'TFTP_oBJECTS',
+    'TFTPObjects': 'TFTP_OBJECTS',
     'vendorProfiles ': 'VENDOR_PROFILES',
-    'viewZones ': 'VIEWS_zONES',
+    'viewZones ': 'VIEWS_ZONES',
     'TSIGKeys ': 'TSIG_KEYS',
     'GSS': 'GSS',
-    'DHCPZones': 'DHCP_zONES',
+    'DHCPZones': 'DHCP_ZONES',
     'ServerGroup': 'SERVERGROUP',
 }
 
@@ -423,7 +422,7 @@ Search by Category:
     Returns an array of entities by searching for keywords associated with objects
     of a specified object category.
 
-Output / Response
+Output / Response:
     Returns an array of entities matching the keyword text and the category type,
     or returns an empty array.
 
@@ -432,10 +431,13 @@ API call:
 
 Parameter Description:
     keyword: The search keyword string. This value cannot be null or empty.
+    
     category: The entity category to be searched. This must be one of the entity categories
               listed in Categories dictionary
+              
     start: Indicates where in the list of returned objects to start returning objects.
            The list begins at an index of 0. This value cannot be null or empty.
+           
     count: The maximum number of objects to return. The default value is 10.
            This value cannot be null or empty.
 
@@ -854,21 +856,21 @@ def test_generic_methods():
 
 def test_search_functions():
     test_custom_search()
+
+    print('\nSearch by Category')
     test_category_search()
 
 
 def test_category_search():
     entities = search_by_category('utoronto', Categories['resourceRecords'], 0, 20)
-    for entity in entities:
-        for k, val in entity.items():
-            if val is None or val == 'ExternalHostRecord':
-                continue
-            print(k+':', val)
-            if k == 'id':
-                vals = get_entity_by_id(val)
-                print('get_entity_by_id', id, vals)
-        print()
-        
+    pprint(entities)
+    entities = search_by_category('math', Categories['resourceRecords'], 0, 20)
+    pprint(entities)
+    entities = search_by_category('128', Categories['IP4Objects'], 0, 20)
+    pprint(entities)
+    entities = search_by_category('cs.utoronto.ca', Categories['all'], 0, 20)
+    pprint(entities)
+    
 def qwe():
     types = 'View,Zone,HostRecord,GenericRecord'
     types = 'Configuration,View'
