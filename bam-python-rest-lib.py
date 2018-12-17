@@ -233,6 +233,41 @@ def get_entity_by_name(id, name, type):
     param_list = {'parentId': id, 'name': name, 'type': type}
     req = requests.get(URL, headers=AuthHeader, params=param_list)
     return req.json()
+    
+'''
+Get Entities by Name
+Returns an array of entities that match the specified parent, name, and object type.
+
+Output / Response
+Returns an array of entities. The array is empty if there are no matching entities.
+API call:
+APIEntity[]
+getEntitiesByName (long parentId, String name, String type, int start, int count )
+
+Parameter Description
+    parentId: The object ID of the parent object of the entities to be returned.
+    name: The name of the entity.
+    types: The type of object to be returned. This value must be one of the object types
+        listed in Object Types on page 209.
+    start: Indicates where in the list of returned objects to start returning objects.
+          The list begins at an index of 0. This value cannot be null or empty.
+    count: The maximum number of objects to return. The default value is 10.
+           This value cannot be null or empty.
+'''
+
+
+def get_entities_by_name(id, name, type, start, count):
+    URL = BaseURL + 'getEntitiesByName'
+    param_list = {
+        'parentId': id,
+        'name': name,
+        'type': type,
+        'start': start,
+        'count': count,
+    }
+    req = requests.get(URL, headers=AuthHeader, params=param_list)
+    return req.json()
+
 
 '''
 
@@ -753,13 +788,12 @@ def test_get_entity_by_name():
 
     lst = ['Test', 'Public', 'ca', 'utoronto', 'frodo', 'ring', 'goofy']
     for nm in lst:
-        info = get_entity_by_name(id, nm, 'Entity')
-        type = info['type']
+        type = get_entity_by_name(id, nm, 'Entity')['type']
         info = get_entity_by_name(id, nm, type)
         type = info['type']
         props = info['properties']
         id = info['id']
-        print(nm, id, type, props)
+        print('name', nm, 'id', id, 'type', type, 'properties', props)
 
 
 def test_get_entity_by_id():
@@ -768,10 +802,15 @@ def test_get_entity_by_id():
         pprint(vals)
 
 def test_get_entities():
-    print()
-    vals = get_entities(2203565, 'Zone', 0, 10)
-    vals = get_entities(2217650, 'Zone', 0, 10)
+    print('\nGetEntities')
+    vals = get_entities(2512207, 'GenericRecord', 0, 10)
     pprint(vals)
+    print('\nGet Entities by Name')
+    info = get_entities_by_name(2512207, "", 'GenericRecord', 0, 10)
+    pprint(info)
+    print('\nGet Entity by Name')
+    info = get_entity_by_name(2512207, "", 'GenericRecord')
+    pprint(info)
 
 def test_get_parent():
     for objid in [2510060, 2512206, 2217649]:
@@ -899,7 +938,7 @@ def main():
             print(item)
 
     test_generic_methods()
-    test_search_functions()
+#    test_search_functions()
     sys.exit()
 
     test_zone_functions()
