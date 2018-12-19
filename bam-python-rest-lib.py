@@ -171,6 +171,11 @@ def bam_logout():
     return req.json()
 
 
+def bam_error(err_str):
+    print(err_str)
+    sys.exit()
+
+
 def get_system_info():
     URL = BaseURL + 'getSystemInfo'
     req = requests.get(URL, headers=AuthHeader)
@@ -182,12 +187,6 @@ def get_configuration_setting(id, name):
     params = {'configurationId': id, 'settingName': name}
     req = requests.get(URL, headers=AuthHeader, params=params)
     return req.json()
-
-
-
-def get_parent_id(id):
-    obj = get_parent(id)
-    return obj['id']
 
 
 '''
@@ -272,10 +271,13 @@ def get_entities_by_name(id, name, type, start, count):
 '''
 
 Get Entity by ID
-Returns objects from the database referenced by their database ID and with its properties fields populated.
+Returns objects from the database referenced by their database ID
+and with its properties fields populated.
+
 Output / Response
 Returns the requested object from the database with its properties fields populated.
-For more information about the available options, refer to IPv4Objects on page 248 in the Property Options Reference section.
+For more information about the available options, refer to IPv4Objects
+on page 248 in the Property Options Reference section.
 
 Returns E.g.
 
@@ -301,15 +303,15 @@ Some objects returned in the array may not have their properties field set.
 `For those objects, you will need to call them individually using
 the getEntityById() method to populate the properties field.
 
-* Using getEntities() to search users will return all users existing in Address Manager. Use
-getLinkedEntities() or linkEntities() to search users under a specific user group.
+* Using getEntities() to search users will return all users existing in Address Manager.
+  Use getLinkedEntities() or linkEntities() to search users under a specific user group.
 
 * Using getEntities() to query server objects in configurations containing XHA pairs might
 result in a connection timeout if any of the servers in an XHA pair are not reachable.
 
 Output / Response
-Returns an array of the requested objects from the database without their properties fields populated, or
-returns an empty array.
+Returns an array of the requested objects from the database without their
+properties fields populated, or returns an empty array.
 
 Returns a list of branch items given the root one level up
 
@@ -325,11 +327,12 @@ def get_entities(id, type, start, count):
 '''
 
 Get Parent
-Returns the parent entity of a given entity.
+Returns the parent entity of a given entity (referenced by Id).
 
 Output / Response
-Returns the APIEntity for the parent entity with its properties fields populated. For more information about
-the available options, refer to IPv4Objects on page 248 in the Property Options Reference section.
+Returns the APIEntity for the parent entity with its properties fields populated.
+For more information about the available options, refer to IPv4Objects
+on page 248 in the Property Options Reference section.
 
 E.g. parent object:
 
@@ -344,9 +347,9 @@ E.g. parent object:
 '''
 
 
-def get_parent(id):
+def get_parent(child_id):
     URL = BaseURL + 'getParent'
-    params = {'entityId': str(id)}
+    params = {'entityId': str(child_id)}
     req = requests.get(URL, headers=AuthHeader, params=params)
     return req.json()
 
@@ -537,13 +540,34 @@ def get_ip4_address(ip, tok):
 
 addEntity Description
 
-Use this function to add Generic Data
 
-The Parent Id is sent in the parameter list
+addEntity() is a generic method for adding:
+    Configurations,
+    DNS zones, and
+    DNS resource records.
 
-The entity is sent as data as a json string
+When using addEntity() to add a zone, you must specify
+a single zone name without any . (dot) characters.
+The parent object must be either a DNS view or another DNS zone.
 
+Output / Response
+Returns the object ID for the new DNS zone.
 
+API call: long addEntity( long parentId, APIEntity entity )
+
+Parameter Description
+parentId: The object ID of the parent DNS view or
+          DNS zone to which the zone is added.
+          
+entity:   The zone name, without any . (dot) characters, to be added.
+
+The entity has the following JSON structure:
+
+ {'id': 2516291, 'name': 'org', 'type': 'Zone', 'properties': None}
+ 
+ or when filled in:
+ 
+ 
 '''
 
 def add_entity(parent_id, entity):
@@ -552,6 +576,104 @@ def add_entity(parent_id, entity):
 
     req = requests.post(URL, headers=AuthHeader, params=params, json=entity)
     return req.json()
+    
+'''
+
+Add Zone: Adds DNS zones.
+
+When using addZone(), you can use . (dot) characters to create the top level domain
+and subzones.
+
+Output / Response
+
+Returns the object ID for the new DNS zone.
+
+API Call:
+long addZone( long parentId, String absoluteName, String properties )
+
+
+Parameter Description:
+
+
+parentId: The object ID for the parent object to which the zone is being added.
+          For top-level domains, the parent object is a DNS view.
+          For sub zones, the parent object is a top-level domain or DNS zone.
+          
+absoluteName: The complete FQDN for the zone with no trailing dot
+              (for example, frodo.org).
+              
+properties: Adds object properties, including a flag for deployment,
+            an optional network template association, and
+            user-defined fields in the format:
+                deployable=<true|false>|template=<template id>|
+                <userField>=<userFieldValue>
+                
+The deployable flag is false by default and is optional. To make the zone
+deployable, set the deployable flag to true.
+
+'''
+
+
+def add_zone(fqdn):
+    URL = BaseURL + 'addZone'
+
+#    if is_zone(fqdn):
+#        print fqdn, 'is already a zone and can not be added'
+#        return -1
+
+    if fqdn in TopLevelDomains:
+        parent_id = ViewId
+    else:
+        parent_id = get_object_id(parent_name(fqdn))
+        info = get_entity_by_id(parent_id)
+        if info['type'] != 'Zone':
+            bam_error('The parent of', fqdn, 'is not a zone')
+    
+    param_list = {
+            'parentId': parent_id,
+            'absoluteName': fqdn,
+            'properties': 'deployable=true',
+    }
+
+    req = requests.post(URL, headers=AuthHeader, params=param_list)
+    return req.json()
+    
+
+'''
+
+Add Zone Template
+    Adds a DNS zone template.
+
+Output / Response:
+    Returns the object ID of the new DNS zone template.
+
+API Call:
+long addZoneTemplate( long parentId, String name, String properties )
+
+Parameter Description:
+    parentId: The object ID of the parent DNS view when adding a view-level zone
+              template. The object ID of the configuration when adding
+              a configurationlevel zone template.
+    name: The name of the DNS zone template. This value can be an empty string ("").
+    
+    properties: Adds object properties, including user-defined fields.
+
+
+'''
+
+
+def add_zone_template(parent_id, name, properties):
+    URL = BaseURL + 'addZoneTemplate'
+    
+    param_list = {
+        'parentId': parent_id,
+        'name': name,
+        'properties': properties,
+    }
+    
+    req = requests.post(URL, headers=AuthHeader, params=param_list)
+    return req.json()
+
 
 '''
 
@@ -613,67 +735,67 @@ def add_host_record(fqdn, ips, ttl, properties):
         print(req.text)
     return req.json()
 
+'''
 
-def get_zone_id(fqdn):
-    zone_names = fqdn.split('.')
-    zone_names.reverse()
-    tld = zone_names[0]
-    if tld in TopLevelDomains:
-        parent_id = ViewId
-        for zone_name in zone_names:
-            zone_entity = get_entity_by_name(parent_id, zone_name, 'Zone')
-            parent_id = zone_entity['id']
-        return parent_id
-    else:
-        bam_error(fqdn + 'does not end in a top level domain')
+Deleting Objects
 
-#
-# given andy.bozo.cathy.dan.ca it returns bozo.cathy.dan.ca
-#
-
-def parent_name(fqdn):
-    return fqdn.split('.',1)[1]
-
-# add a Zone to a DNS tree
-# returns the objectID of the new Zone
+Generic methods for deleting an object.
+There are two generic methods for getting entity values:
+• Delete
+• Delete with Options
 
 
-def add_zone(fqdn):
-    URL = BaseURL + 'addZone'
+Delete:
+    Deletes an object using the generic delete() method.
+    
+Output / Response:
+    None.
+    
+API call:
+    Pass the entity ID from the database identifying the object to be deleted.
+    void delete ( long ObjectId )
 
-#    if is_zone(fqdn):
-#        print fqdn, 'is already a zone and can not be added'
-#        return -1
+Parameter Description:
+    ObjectId The ID for the object to be deleted.
 
-    if fqdn in TopLevelDomains:
-        parent_id = ViewId
-    else:
-        parent_zone = parent_name(fqdn)
-        parent_id = get_zone_id(parent_zone)
+'''
 
-    param_list = {
-            'parentId': parent_id,
-            'absoluteName': fqdn,
-            'properties': 'deployable=true',
-    }
-
-    req = requests.post(URL, headers=AuthHeader, params=param_list)
-    return req.json()
-
-# This delete operation does NOT return JSON
-
-def delete_object(id):
+def delete_object(obj_id):
     URL = BaseURL + 'delete'
-    param_list = {'objectId': id}
+    param_list = {'objectId': obj_id}
     req = requests.delete(URL, headers=AuthHeader, params=param_list)
     if Debug:
         print('delete request info:')
         print('request URL: ', req.url)
         print('server response ', req.text)
     return req.text
+    
+'''
+
+Delete with Options
+    Deletes objects that have options associated with their removal.
+    This method currently works only with the deletion of dynamic records
+    from the Address Manager database. When deleted, dynamic records present
+    the option of not dynamically deploying to DNS/DHCP Server.
+Output / Response
+    None.
+
+'''
+    
+
+def delete_with_options(obj_id, options):
+    URL = BaseURL + 'deleteWithOptions'
+    param_list = {
+        'objectId': obj_id,
+        'options': options
+    }
+    req = requests.delete(URL, headers=AuthHeader, params=param_list)
+    return req.text
+
+
+
 
 # Deletes all data and RRs in the Zone tree including other Zones
-
 
 def delete_zone(fqdn):
     zone_id = get_zone_id(fqdn)
@@ -716,6 +838,8 @@ def assign_ip4Address(config_id, ip_addr, mac_addr, host_info, action, props):
     }
     req = requests.post(URL, headers=AuthHeader, params=params)
     return req.json()
+
+
 #
 # assumes the two global variable have been set: ConfigName, ViewName
 #
@@ -736,32 +860,43 @@ def set_view_id():
     else:
         print('Error: The parent (Configuration) Id must be set before setting the View Id')
         sys.exit()
+        
+#
+# given andy.bozo.cathy.dan.ca it returns bozo.cathy.dan.ca
+#
 
+def parent_name(fqdn):
+    return fqdn.split('.',1)[1]
 
-def get_object_id(fqdn):
-    id = get_view_id()
+#
+# Get the Object info (Id and parentId) given a FQDN
+#
+
+  
+def get_object_info(fqdn):
+    id = ViewId
     names = fqdn.split('.')
     lg = len(names)
     for name in names[::-1]:
         info = get_entity_by_name(id, name, 'Entity')
+        id = info['id']
         if Debug:
-            pprint(info)
-        if info['type'] == 'Zone':
-            id = info['id']
-            lg -= 1
-        else:
-            name = '.'.join(names[:lg])
-            info = get_entity_by_name(id, name, 'Entity')
-            if Debug:
-                pprint(info)
-            break
+            print(id, info)
+    return info
+
+
+def get_object_id(fqdn):
+    info = get_object_info(fqdn)
     return info['id']
+    
 
+#
 # return the parent ID of an Object based on its name
+#
 
 
-def Fqdn2Id(fqdn):
-    parent_zone = '.'.join(fqdn.split('.')[1:])
+def get_parent_id(fqdn):
+    parent_zone = parent_name(fqdn)
     parent_id = get_object_id(parent_zone)
     return parent_id
 
@@ -781,6 +916,17 @@ def get_host_info(vid, fqdn):
     name = '.'.join(names[:l])
     info = get_entity_by_name(id, name, 'GenericRecord')
     return info
+    
+#
+# retrieves the Id of a Zone or Subzone
+#
+
+def get_zone_id(fqdn):
+    info = get_object_info(fqdn)
+    if info['type'] == 'Zone':
+        return info['id']
+    else:
+        print(fqdn, 'is not a zone')
 
 
 def test_get_entity_by_name():
@@ -803,7 +949,7 @@ def test_get_entity_by_id():
 
 def test_get_entities():
     print('\nGetEntities')
-    vals = get_entities(2512207, 'GenericRecord', 0, 10)
+    vals = get_entities(2512207, 'GenericRecord', 0, 20)
     pprint(vals)
     print('\nGet Entities by Name')
     info = get_entities_by_name(2512207, "", 'GenericRecord', 0, 10)
@@ -817,6 +963,18 @@ def test_get_parent():
         vals = get_parent(objid)
         print('child id', objid)
         print('parent object',vals)
+    
+    print()
+    for nm in ['goofy.zulu.org', 'frodo.utoronto.ca']:
+        pid = get_parent_id(nm)
+        print(nm, 'has a parent id of', pid)
+    
+    print()
+    for nm in ['goofy.zulu.org', 'frodo.utoronto.ca']:
+        id = get_object_id(nm)
+        pinfo = get_parent(id)
+        parent = parent_name(nm)
+        print('Parent info for', parent, pinfo)
 
 
 # Tests for Searching for and Retrieving Entities
@@ -840,6 +998,29 @@ def is_zone(fqdn):
     vals = search_by_object_types(fqdn, 'Zone', 0, 3)
     return vals
 
+#
+# Add a zone using the generic add_generic call rather than
+# the specific add_zone()one
+#
+
+    
+def add_zone_generic(fqdn):
+    dot = '.'
+    n = fqdn.split(dot)
+    nm = n[0]
+    subzone = dot.join(n[1:])
+    par_id = get_object_id(subzone)
+    props = 'deployable=true|'
+    props += 'absoluteName=' + fqdn + '|'
+    ent = {
+        'name': nm,
+        'type': 'Zone',
+        'properties': props
+    }
+    val = add_entity(par_id, ent)
+    return val
+
+
 def test_rr_functions():
 
     ip = '128.100.103.123'
@@ -855,17 +1036,29 @@ def test_rr_functions():
     pprint(vals)
 
 def test_zone_functions():
+    dot = '.'
 
-#    val = add_zone('org')
-#    val = add_zone('zulu.org')
-#    val = add_zone('watusi.zulu.org')
-
-    zone = 'watusi.zulu.org'
-    for z in zone.split('.'):
+    
+    for z in ['org', 'zulu.org', 'watusi.zulu.org']:
         val = is_zone(z)
-        print(z, val)
-    val = delete_zone(zone)
+        print(val)
+        val = add_zone(z)
+        print(val)
+    print('Generic zone add')
+    for z in ['yes.uoft.ca', 'no.uoft.ca']:
+        ent = add_zone_generic(z)
+        print(ent)
+        val = get_object_info(z)
+        print(val)
+    
+    print('Adding a Zone Template')
+    val = add_zone_template(ViewId, 'default', 'deployable=true')
     print(val)
+        
+
+     
+#    val = delete_zone(zone)
+    
 
 '''
 
@@ -893,6 +1086,10 @@ def test_generic_methods():
     print()
     print('test getParent')
     test_get_parent()
+    print()
+    print('get object id')
+    id = get_object_id('goofy.ring.frodo.utoronto.ca')
+    print(id)
 
 def test_search_functions():
     test_custom_search()
@@ -937,11 +1134,13 @@ def main():
         for item in sysinfo.split('|'):
             print(item)
 
+    test_zone_functions()
+    sys.exit()
     test_generic_methods()
 #    test_search_functions()
-    sys.exit()
+    
 
-    test_zone_functions()
+    
 #    test_rr_functions()
 
 
