@@ -133,6 +133,442 @@ Categories = {
 
 TopLevelDomains = ['ca', 'edu', 'org', 'net', 'com', 'int' ]
 
+'''
+
+Generic API Methods
+
+* use the UPDATE, DELETE and GET methods
+* are used in many Address Manager API scripts
+
+
+Getting Objects:
+
+Generic methods for getting entity values.
+*  Get entities by name
+*  Get entities by ID
+*  Get Entities
+*  Get Parent
+
+See the BAM API Guide, Chapter 4
+
+'''
+
+
+'''
+Get Entity by Name
+
+Returns objects from the database referenced by their name field.
+
+Output / Response: Returns the requested object from the database.
+
+APIEntity getEntityByName( long parentId, String name, String type )
+
+Parameter Description
+ parentId The ID of the target object’s parent object.
+ name The name of the target object.
+ type The type of object returned by the method.
+ This string must be one of the constants listed in ObjectTypes
+
+'''
+
+
+def get_entity_by_name(id, name, type):
+    URL = BaseURL + 'getEntityByName'
+    param_list = {'parentId': id, 'name': name, 'type': type}
+    req = requests.get(URL, headers=AuthHeader, params=param_list)
+    return req.json()
+    
+
+'''
+
+Get Entity by ID
+Returns objects from the database referenced by their database ID
+and with its properties fields populated.
+
+Output / Response
+Returns the requested object from the database with its properties fields populated.
+For more information about the available options, refer to IPv4Objects
+on page 248 in the Property Options Reference section.
+
+Returns E.g.
+
+{
+    'id': 2217650,
+    'name': 'utoronto',
+    'properties': 'deployable=true|absoluteName=utoronto.ca|',
+    'type': 'Zone'
+}
+
+'''
+
+
+def get_entity_by_id(id):
+    URL = BaseURL + 'getEntityById'
+    params = {'id': str(id)}
+    req = requests.get(URL, headers=AuthHeader, params=params)
+    return req.json()
+
+
+'''
+
+Get Entities
+
+Returns an array of requested child objects for a given parentId value.
+Some objects returned in the array may not have their properties field set.
+`For those objects, you will need to call them individually using
+the getEntityById() method to populate the properties field.
+
+* Using getEntities() to search users will return all users existing in Address Manager.
+  Use getLinkedEntities() or linkEntities() to search users under a specific user group.
+
+* Using getEntities() to query server objects in configurations containing XHA pairs might
+result in a connection timeout if any of the servers in an XHA pair are not reachable.
+
+Output / Response
+Returns an array of the requested objects from the database without their
+properties fields populated, or returns an empty array.
+
+API call:
+    getEntities( long parentId, String type, int start, int count )
+
+Parameter Description:
+    parentId: The object ID of the target object’s parent object.
+    type: The type of object returned.
+          This must be one of the constants listed in Object Types
+    start:  Indicates where in the list of objects to start returning objects.
+            The list begins at an index of 0.
+    count:  Indicates the maximum number of child objects to return.
+
+Returns a list of branch items given the root one level up
+
+'''
+
+def get_entities(id, type, start, count):
+    URL = BaseURL + 'getEntities'
+    params = {'parentId': id, 'type': type, 'start': start, 'count': count}
+    req = requests.get(URL, headers=AuthHeader, params=params)
+    return req.json()
+
+
+'''
+
+Get Parent
+
+Returns the parent entity of a given entity.
+
+Output / Response
+Returns the APIEntity for the parent entity with its properties fields populated. For more information about
+the available options, refer to IPv4Objects on page 248 in the Property Options Reference section.
+
+API call:
+    APIEntity getParent ( long entityId )
+
+Parameter Description:
+    entityId:   The Entity Id
+
+
+'''
+
+
+def get_parent(child_id):
+    URL = BaseURL + 'getParent'
+    params = {'entityId': str(child_id)}
+    req = requests.get(URL, headers=AuthHeader, params=params)
+    return req.json()
+
+
+'''
+
+Generic methods for searching and retrieving entities.
+
+    * Custom Search
+    * Search by Category
+    * Search by Object Types
+    * Get Entities by Name
+    * Get Entities by Name Using Options
+    * Get MAC Address
+
+Supported wildcards in the search string:
+You can use the following wildcards when invoking a search method. These wildcards are supported only
+in the String parameter:
+
+    * ^ matches the beginning of a string. For example, ^ex matches example but not text.
+    * $ matches the end of string. For example: ple$ matches example but not please.
+    * * matches zero or more characters within a string. For example: ex*t matches exit and excellent.
+
+Note: You cannot use the following characters in the search string:
+
+    * , (comma)
+    * ‘ (single quotation mark)
+    * ( ) (parentheses)
+    * [ ] (square brackets)
+    * { } (braces)
+    * % (percent)
+    * ? (question mark)
+    * + (addition/plus sign)
+
+'''
+
+'''
+
+Custom Search
+    Search for an array of entities by specifying object properties.
+
+Output / Response
+    Returns an array of APIEntities matching the specified object properties or returns an empty array.
+    The APIEntity will at least contain Object Type, Object ID, Object Name, and Object Properties.
+
+API call:
+    APIEntity[]
+    customSearch ( String[] filters, String type, String[] options, int start, int count)
+
+    filters: List of properties on which the search is based.  Valid format is: name=value, name2=value2
+             E.g. filters=filter1=abc&filters=filter2=def
+
+    type: The object type that you wish to search. The type cannot be null or empty string ""
+          This must be one for the following object types:
+
+            * IP4Block
+            * IP4Network
+            * IP4Addr
+            * GenericRecord
+            * HostRecord
+            * Any other objects with user-defined fields
+
+    options: A list of strings of search options specifying the search behavior.
+             Reserved for future use.
+             E.g. options=option1=val1&options=option2=val2
+
+    start: Indicates where in the list of returned objects to start returning objects.
+           The value must be a non-negative value and cannot be null or empty
+
+    count: The maximum number of objects to return.
+           The value must be a positive value between 1 and 1000.
+           This value cannot be null or empty.
+
+    Supported fields/filters for each type:
+
+        Type: GenericRecord
+        Fields:
+            * comments=Text
+            * ttl=Long
+            * recordType=Text
+            * rdata=Text
+
+        Type: HostsRecord
+        Fields:
+            * comments=Text
+            * ttl=Long
+        
+        Type: IP4Block
+        Fields:
+            * inheritDNSRestrictions=Boolean
+            * pingBeforeAssign=Boolean
+            * reverseZoneSigned=Boolean
+            * allowDupHost=Boolean
+            * inheritDefaultDomains=Boolean
+            * highwatermark=Integer
+            * lowwatermark=Integer
+
+        Type: IP4Network
+        Fields:
+            * inheritDNSRestrictions=Boolean
+            * pingBeforeAssign=Boolean
+            * reverseZoneSigned=Boolean
+            * allowDupHost=Boolean
+            * inheritDefaultDomains=Boolean
+            * portInfo=Text
+            * highwatermark=Integer
+            * lowwatermark=Integer
+
+        Type: IP4Addr
+        Fields:
+            * routerPortInfo=Text
+            * portInfo=Text
+            * vlanInfo=Text
+
+API Example:
+    http://<AddressManager_ip>/Services/REST/customSearch?
+    filters=filter1=abc&filters=filter2=def&type=IP4Block&options=&start=0&count=10
+
+The filters and options should be sent using the follows Requests data structure:
+
+    'filters': ['comments=This is important', 'recordType=MX', 'ttl=86400', 'rdata=128.100.103.*']
+
+The return is a list as follows
+
+[
+    {'id': 2429335, 'name': '',
+      'properties': 'ttl=86400|absoluteName=theta.utoronto.ca|linkedRecordName=alt2.aspmx.l.google.com|priority=5|',
+      'type': 'MXRecord'},
+    {'id': 2429340, 'name': '',
+      'properties': 'ttl=86400|absoluteName=lcd.utoronto.ca|linkedRecordName=aspmx3.googlemail.com|priority=10|',
+      'type': 'MXRecord'},
+    {'id': 2429341, 'name': '',
+      'properties': 'ttl=86400|absoluteName=lcd.utoronto.ca|linkedRecordName=aspmx2.googlemail.com|priority=10|',
+      'type': 'MXRecord'}
+]
+
+
+'''
+
+def custom_search(fltrs, typ, strt, cnt):
+    URL = BaseURL + 'customSearch'
+    opts = ''
+    param_list = {
+            'filters': fltrs,
+            'type': typ,
+            'options': opts,
+            'start': strt,
+            'count': cnt,
+    }
+    req = requests.get(URL, headers=AuthHeader, params=param_list)
+    return req.json()
+
+
+'''
+
+Search by Category:
+
+    Returns an array of entities by searching for keywords associated with objects
+    of a specified object category.
+
+Output / Response:
+    Returns an array of entities matching the keyword text and the category type,
+    or returns an empty array.
+
+API call:
+    APIEntity[] searchByCategory ( String keyword, String category, int start, int count )
+
+Parameter Description:
+    keyword: The search keyword string. This value cannot be null or empty.
+    
+    category: The entity category to be searched. This must be one of the entity categories
+              listed in Categories dictionary
+              
+    start: Indicates where in the list of returned objects to start returning objects.
+           The list begins at an index of 0. This value cannot be null or empty.
+           
+    count: The maximum number of objects to return. The default value is 10.
+           This value cannot be null or empty.
+
+
+'''
+
+def search_by_category(key, cat, strt, stp):
+    URL = BaseURL + 'searchByCategory'
+
+    param_list = {
+        'keyword': key,
+        'category': cat,
+        'start': strt,
+        'count': stp
+    }
+
+    req = requests.get(URL, headers=AuthHeader, params=param_list)
+    return req.json()
+
+
+'''
+
+Search by Object Types
+
+Returns an array of entities by searching for keywords associated with objects of a specified object type.
+You can search for multiple object types with a single method call.
+
+Output / Response
+Returns an array of entities matching the keyword text and the category type, or returns an empty array.
+
+Arguments in the parameter list:
+
+keyword: The search string. Can not be NULL or Empty
+        ^ matches the beginning of a string
+        $ matches the end of a string
+        * matches one or more characters within a string
+
+types: The object types for which to search in the format type1,type2,[type3 ...]
+       See ObjectTypes list E.g.
+        'Entity','Configuration','View','Zone','HostRecord','MXRecord',
+
+start: List index (starting with 0) to mark the beginning of the return
+
+count: Maximum values to return. Default is 10
+
+
+'''
+
+
+def search_by_object_types(key, typs, strt, cnt):
+    URL = BaseURL + 'searchByObjectTypes'
+    param_list = {
+        'keyword': key,
+        'types': typs,
+        'start': strt,
+        'count': cnt
+    }
+    req = requests.get(URL, headers=AuthHeader, params=param_list)
+    return req.json()
+
+
+'''
+Get Entities by Name
+
+Returns an array of entities that match the specified parent, name, and object type.
+
+Output / Response:  Returns an array of entities.
+                    The array is empty if there are no matching entities.
+API call:
+
+APIEntity getEntitiesByName (long parentId, String name, String type, int start, int count )
+
+Parameter Description
+    parentId: The object ID of the parent object of the entities to be returned.
+    name: The name of the entity.
+    types:  The type of object to be returned. This value must be one of the object types
+            listed in Object Types on page 209.
+    start:  Indicates where in the list of returned objects to start returning objects.
+            The list begins at an index of 0. This value cannot be null or empty.
+    count: The maximum number of objects to return. The default value is 10.
+           This value cannot be null or empty.
+
+'''
+
+
+def get_entities_by_name(id, name, type, start, count):
+    URL = BaseURL + 'getEntitiesByName'
+    param_list = {
+        'parentId': id,
+        'name': name,
+        'type': type,
+        'start': start,
+        'count': count,
+    }
+    req = requests.get(URL, headers=AuthHeader, params=param_list)
+    return req.json()
+
+
+'''
+
+Get Parent
+Returns the parent entity of a given entity (referenced by Id).
+
+Output / Response
+Returns the APIEntity for the parent entity with its properties fields populated.
+For more information about the available options, refer to IPv4Objects
+on page 248 in the Property Options Reference section.
+
+E.g. parent object:
+
+{
+    'id': 2217650,
+    'name': 'utoronto',
+    'type': 'Zone',
+    'properties': 'deployable=true|absoluteName=utoronto.ca|'
+}
+
+
+'''
+
 def bam_error(err_str):
     print(err_str)
     sys.exit()
@@ -189,346 +625,10 @@ def get_configuration_setting(id, name):
     return req.json()
 
 
-'''
 
-Generic API Methods
 
-* use the UPDATE, DELETE and GET methods
-* are used in many Address Manager API scripts
 
 
-First Getting Objects:
-
-
-Generic methods for getting entity values.
-*  Get entities by name
-*  Get entities by ID
-*  Get Entities
-*  Get Parent
-
-See the BAM API Guide, Chapter 4
-
-'''
-
-
-'''
-Get Entity by Name
-Returns objects from the database referenced by their name field.
-
-Output / Response: Returns the requested object from the database.
-
-APIEntity getEntityByName( long parentId, String name, String type )
-Parameter Description
- parentId The ID of the target object’s parent object.
- name The name of the target object.
- type The type of object returned by the method.
- This string must be one of the constants listed in ObjectTypes
-
-'''
-
-
-def get_entity_by_name(id, name, type):
-    URL = BaseURL + 'getEntityByName'
-    param_list = {'parentId': id, 'name': name, 'type': type}
-    req = requests.get(URL, headers=AuthHeader, params=param_list)
-    return req.json()
-    
-'''
-Get Entities by Name
-Returns an array of entities that match the specified parent, name, and object type.
-
-Output / Response
-Returns an array of entities. The array is empty if there are no matching entities.
-API call:
-APIEntity[]
-getEntitiesByName (long parentId, String name, String type, int start, int count )
-
-Parameter Description
-    parentId: The object ID of the parent object of the entities to be returned.
-    name: The name of the entity.
-    types: The type of object to be returned. This value must be one of the object types
-        listed in Object Types on page 209.
-    start: Indicates where in the list of returned objects to start returning objects.
-          The list begins at an index of 0. This value cannot be null or empty.
-    count: The maximum number of objects to return. The default value is 10.
-           This value cannot be null or empty.
-'''
-
-
-def get_entities_by_name(id, name, type, start, count):
-    URL = BaseURL + 'getEntitiesByName'
-    param_list = {
-        'parentId': id,
-        'name': name,
-        'type': type,
-        'start': start,
-        'count': count,
-    }
-    req = requests.get(URL, headers=AuthHeader, params=param_list)
-    return req.json()
-
-
-'''
-
-Get Entity by ID
-Returns objects from the database referenced by their database ID
-and with its properties fields populated.
-
-Output / Response
-Returns the requested object from the database with its properties fields populated.
-For more information about the available options, refer to IPv4Objects
-on page 248 in the Property Options Reference section.
-
-Returns E.g.
-
-{
-    'id': 2217650,
-    'name': 'utoronto',
-    'properties': 'deployable=true|absoluteName=utoronto.ca|',
-    'type': 'Zone'
-}
-
-'''
-
-def get_entity_by_id(id):
-    URL = BaseURL + 'getEntityById'
-    params = {'id': str(id)}
-    req = requests.get(URL, headers=AuthHeader, params=params)
-    return req.json()
-
-
-'''
-Returns an array of requested child objects for a given parentId value.
-Some objects returned in the array may not have their properties field set.
-`For those objects, you will need to call them individually using
-the getEntityById() method to populate the properties field.
-
-* Using getEntities() to search users will return all users existing in Address Manager.
-  Use getLinkedEntities() or linkEntities() to search users under a specific user group.
-
-* Using getEntities() to query server objects in configurations containing XHA pairs might
-result in a connection timeout if any of the servers in an XHA pair are not reachable.
-
-Output / Response
-Returns an array of the requested objects from the database without their
-properties fields populated, or returns an empty array.
-
-Returns a list of branch items given the root one level up
-
-'''
-
-def get_entities(id, type, start, count):
-    URL = BaseURL + 'getEntities'
-    params = {'parentId': id, 'type': type, 'start': start, 'count': count}
-    req = requests.get(URL, headers=AuthHeader, params=params)
-    return req.json()
-
-
-'''
-
-Get Parent
-Returns the parent entity of a given entity (referenced by Id).
-
-Output / Response
-Returns the APIEntity for the parent entity with its properties fields populated.
-For more information about the available options, refer to IPv4Objects
-on page 248 in the Property Options Reference section.
-
-E.g. parent object:
-
-{
-    'id': 2217650,
-    'name': 'utoronto',
-    'type': 'Zone',
-    'properties': 'deployable=true|absoluteName=utoronto.ca|'
-}
-
-
-'''
-
-
-def get_parent(child_id):
-    URL = BaseURL + 'getParent'
-    params = {'entityId': str(child_id)}
-    req = requests.get(URL, headers=AuthHeader, params=params)
-    return req.json()
-
-'''
-
-Generic methods for searching and retrieving entities.
-
-    * Custom Search
-    * Search by Category
-    * Search by Object Types
-    * Get Entities by Name
-    * Get Entities by Name Using Options
-    * Get MAC Address
-
-Supported wildcards in the search string:
-You can use the following wildcards when invoking a search method. These wildcards are supported only
-in the String parameter:
-
-    * ^ matches the beginning of a string. For example, ^ex matches example but not text.
-    * $ matches the end of string. For example: ple$ matches example but not please.
-    * * matches zero or more characters within a string. For example: ex*t matches exit and excellent.
-
-Note: You cannot use the following characters in the search string:
-
-    * , (comma)
-    * ‘ (single quotation mark)
-    * ( ) (parentheses)
-    * [ ] (square brackets)
-    * { } (braces)
-    * % (percent)
-    * ? (question mark)
-    * + (addition/plus sign)
-
-'''
-
-'''
-
-Custom Search
-    Search for an array of entities by specifying object properties.
-
-Output / Response
-    Returns an array of APIEntities matching the specified object properties or returns an empty array.
-    The APIEntity will at least contain Object Type, Object ID, Object Name, and Object Properties.
-
-API call:
-    APIEntity[]
-    customSearch ( String[] filters, String type, String[] options, int start, int count)
-
-    filters: List of properties on which the search is based.
-             Valid format is: name=value, name2=value2
-
-    type: The object type that you wish to search. The type cannot be null or empty string ""
-          This must be one for the following object types:
-
-        * IP4Block
-        * IP4Network
-        * IP4Addr
-        * GenericRecord
-        * HostRecord
-        * Any other objects with user-defined fields
-
-    Each Object type has unique values: E.g.
-    HostRecord: comments=TEXT, ttl=Long
-    GenericRecord: comments=TEXT, ttl=Long, recordType=TEXT, rdata=TEXT
-
-API Example:
-    http://<AddressManager_ip>/Services/REST/customSearch?
-    filters=filter1=abc&filters=filter2=def&type=IP4Block&options=&start=0&count=10
-
-Returns an array of entities matching the keyword text and
-the category type, or returns an empty array.
-
-E.g.
-
-[
-    {'id': 2429335, 'name': '',
-      'properties': 'ttl=86400|absoluteName=theta.utoronto.ca|linkedRecordName=alt2.aspmx.l.google.com|priority=5|',
-      'type': 'MXRecord'},
-    {'id': 2429340, 'name': '',
-      'properties': 'ttl=86400|absoluteName=lcd.utoronto.ca|linkedRecordName=aspmx3.googlemail.com|priority=10|',
-      'type': 'MXRecord'},
-    {'id': 2429341, 'name': '',
-      'properties': 'ttl=86400|absoluteName=lcd.utoronto.ca|linkedRecordName=aspmx2.googlemail.com|priority=10|',
-      'type': 'MXRecord'}
-]
-
-
-'''
-
-
-def custom_search(filters, typ, start, stop):
-    URL = BaseURL + 'customSearch'
-    options = ''
-    param_list = {
-            'start': start,
-            'stop': stop,
-            'options': options,
-            'type': typ,
-            'filters': filters,
-    }
-    req = requests.get(URL, headers=AuthHeader, params=param_list)
-    return req.json()
-
-
-'''
-
-Search by Category:
-
-    Returns an array of entities by searching for keywords associated with objects
-    of a specified object category.
-
-Output / Response:
-    Returns an array of entities matching the keyword text and the category type,
-    or returns an empty array.
-
-API call:
-    APIEntity[] searchByCategory ( String keyword, String category, int start, int count )
-
-Parameter Description:
-    keyword: The search keyword string. This value cannot be null or empty.
-    
-    category: The entity category to be searched. This must be one of the entity categories
-              listed in Categories dictionary
-              
-    start: Indicates where in the list of returned objects to start returning objects.
-           The list begins at an index of 0. This value cannot be null or empty.
-           
-    count: The maximum number of objects to return. The default value is 10.
-           This value cannot be null or empty.
-
-
-'''
-
-def search_by_category(keyword, category, start, stop):
-    URL = BaseURL + 'searchByCategory'
-
-    param_list = {
-        'keyword': keyword,
-        'category': category,
-        'start': start,
-        'count': stop
-    }
-
-    req = requests.get(URL, headers=AuthHeader, params=param_list)
-    return req.json()
-
-
-'''
-
-Search by Object Types Description
-
-Arguments in the parameter list:
-
-keyword: The search string. Can not be NULL or Empty
-        ^ matches the beginning of a string
-        $ matches the end of a string
-        * matches one or more characters within a string
-
-types: The object types for which to search in the format type1,type2,[type3 ...]
-       See ObjectTypes list E.g.
-        'Entity','Configuration','View','Zone','HostRecord','MXRecord',
-start: List index (starting with 0) to mark the beginning of the return
-count: Maximum values to return. Default is 10
-
-Returns: a list of entries matching the combination of matching name and type
-
-'''
-
-
-def search_by_object_types(key, types, start, cnt):
-    URL = BaseURL + 'searchByObjectTypes'
-    param_list = {
-        'keyword': key,
-        'types': types,
-        'start': start,
-        'count': cnt
-    }
-    req = requests.get(URL, headers=AuthHeader, params=param_list)
-    return req.json()
 
 
 
@@ -793,8 +893,6 @@ def delete_with_options(obj_id, options):
     return req.text
 
 
-
-
 # Deletes all data and RRs in the Zone tree including other Zones
 
 def delete_zone(fqdn):
@@ -839,6 +937,36 @@ def assign_ip4Address(config_id, ip_addr, mac_addr, host_info, action, props):
     req = requests.post(URL, headers=AuthHeader, params=params)
     return req.json()
 
+'''
+
+Low level functions to manipulate the IP address space
+
+'''
+
+def add_IP4_Network(bid, cidr, props):
+    URL = BaseURL + 'addIP4Network'
+
+    param_list = {
+        'blockId': bid,
+        'CIDR': cidr,
+        'properties': props
+    }
+
+    req = resquests.post(URL, headers=AuthHeader, params=param_list)
+    return req.json()
+
+def add_IP4_Block_By_CIDR(pid, cidr, props):
+    URL = BaseURL + 'addIP4BlockByCIDR'
+    
+    param_list = {
+            'parentId': pid,
+            'CIDR': cidr,
+            'properties': props
+    }
+
+    req = resquests.post(URL, headers=AuthHeader, params=param_list)
+    return req.json()
+
 
 #
 # assumes the two global variable have been set: ConfigName, ViewName
@@ -869,7 +997,7 @@ def parent_name(fqdn):
     return fqdn.split('.',1)[1]
 
 #
-# Get the Object info (Id and parentId) given a FQDN
+# Get the Object info (Id and parentId) given a FQDN or a CIDR block
 #
 
   
@@ -1037,13 +1165,14 @@ def test_rr_functions():
 
 def test_zone_functions():
     dot = '.'
-
     
-    for z in ['org', 'zulu.org', 'watusi.zulu.org']:
+    for z in ['zulu.org', 'watusi.zulu.org']:
         val = is_zone(z)
         print(val)
-        val = add_zone(z)
+        val = delete_zone(z)
+        val = add_zone_generic(z)
         print(val)
+
     print('Generic zone add')
     for z in ['yes.uoft.ca', 'no.uoft.ca']:
         ent = add_zone_generic(z)
@@ -1051,15 +1180,12 @@ def test_zone_functions():
         val = get_object_info(z)
         print(val)
     
-    print('Adding a Zone Template')
-    val = add_zone_template(ViewId, 'default', 'deployable=true')
-    print(val)
+#    print('Adding a Zone Template')
+#    val = add_zone_template(ViewId, 'default', 'deployable=true')
+#    print(val)
         
-
-     
 #    val = delete_zone(zone)
     
-
 '''
 
 # zones = get_zones_by_hint(view_id,1,10, op)
@@ -1091,12 +1217,6 @@ def test_generic_methods():
     id = get_object_id('goofy.ring.frodo.utoronto.ca')
     print(id)
 
-def test_search_functions():
-    test_custom_search()
-
-    print('\nSearch by Category')
-    test_category_search()
-
 
 def test_category_search():
     entities = search_by_category('utoronto', Categories['resourceRecords'], 0, 20)
@@ -1107,6 +1227,19 @@ def test_category_search():
     pprint(entities)
     entities = search_by_category('cs.utoronto.ca', Categories['all'], 0, 20)
     pprint(entities)
+
+def test_object_type_search():
+    types = 'View,Zone,HostRecord,GenericRecord'
+    vars = search_by_object_types('*ab*', types, 0, 100)
+    pprint(vars)
+
+def test_search_functions():
+    print('Custom Search')
+    test_custom_search()
+    print('\nSearch by Category')
+    test_category_search()
+    print('\nSearch by Object Type')
+    test_object_type_search()
     
 def qwe():
     types = 'View,Zone,HostRecord,GenericRecord'
@@ -1134,15 +1267,12 @@ def main():
         for item in sysinfo.split('|'):
             print(item)
 
-    test_zone_functions()
+    test_search_functions()
     sys.exit()
+    test_zone_functions()
     test_generic_methods()
-#    test_search_functions()
-    
-
     
 #    test_rr_functions()
-
 
     zone = 'bozo.utoronto.ca'
     id = Fqdn2Id(zone)
