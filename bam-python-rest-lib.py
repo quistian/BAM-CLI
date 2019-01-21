@@ -182,13 +182,14 @@ def get_entity_by_name(id, name, type):
 '''
 
 Get Entity by ID
+
 Returns objects from the database referenced by their database ID
 and with its properties fields populated.
 
 Output / Response
-Returns the requested object from the database with its properties fields populated.
-For more information about the available options, refer to IPv4Objects
-on page 248 in the Property Options Reference section.
+    Returns the requested object from the database with its properties fields populated.
+    For more information about the available options, refer to IPv4Objects
+    on page 248 in the Property Options Reference section.
 
 Returns E.g.
 
@@ -511,6 +512,7 @@ def search_by_object_types(key, typs, strt, cnt):
 
 
 '''
+
 Get Entities by Name
 
 Returns an array of entities that match the specified parent, name, and object type.
@@ -534,18 +536,283 @@ Parameter Description
 '''
 
 
-def get_entities_by_name(id, name, type, start, count):
+def get_entities_by_name(pid, name, typ, start, count):
     URL = BaseURL + 'getEntitiesByName'
     param_list = {
-        'parentId': id,
+        'parentId': pid,
         'name': name,
-        'type': type,
+        'type': typ,
         'start': start,
         'count': count,
     }
     req = requests.get(URL, headers=AuthHeader, params=param_list)
     return req.json()
 
+'''
+
+Get Entities by Name Using Options
+
+Returns an array of entities that match the specified name and object type. Searching behavior can be
+changed by using the options.
+
+Output / Response
+Returns an array of entities. The array is empty if there are no matching entities.
+
+API call:
+APIEntity[] getEntitiesByNameUsingOptions ( long parentId, String name, String type, int
+start, int count, String options )
+
+Parameters:
+
+    Parameters:
+
+    parentId: The object ID of the parent object of the entities to be returned.
+    name:   The name of the entity.
+    types:  The type of object to be returned. This value must be one of the object types listed
+            in Object Types
+    start:  Indicates where in the list of returned objects to start returning objects. The list
+            begins at an index of 0. This value cannot be null or empty.
+    count:  The maximum number of objects to return. The default value is 10. This value
+            cannot be null or empty.
+    options: A string containing options. Currently the only available option is
+            ObjectProperties.ignoreCase. By default, the value is set to false. Setting this
+            option to true will ignore the case-sensitivity used while searching entities by name.
+
+            ObjectProperties.ignoreCase = [true | false]
+
+'''
+
+def get_entities_by_name_using_options(pid, name, typ, start, count, opts):
+    URL = BaseURL + 'getEntitiesByNameUsingOptions'
+    param_list = {
+        'parentId': pid,
+        'name': name,
+        'type': typ,
+        'start': start,
+        'count': count,
+        'options': opts,
+    }
+    req = requests.get(URL, headers=AuthHeader, params=param_list)
+    return req.json()
+
+'''
+
+Get MAC Address
+
+Returns an APIEntity for a MAC address.
+
+Output / Response
+Returns an APIEntity for the MAC address. Returns an empty APIEntity if the MAC address does not exist.
+The property string of the returned entity should include the MAC address:
+    address=nn-nn-nn-nn-nn-nn|
+If the MAC address is in a MAC pool, the property string includes the MAC pool information:
+    macPool=macPoolName|
+
+API call:
+APIEntity getMACAddress ( long configurationId, String macAddress )
+
+Parameter Description
+    configurationId: The object ID of the configuration in which the MAC address is located.
+    macAddress: The MAC address in the format nnnnnnnnnnnn, nn-nn-nn-nn-nn-nn or
+                nn:nn:nn:nn:nn:nn, where nn is a hexadecimal value.
+
+'''
+
+def get_MAC_Address(confid, macaddr):
+    URL = BaseURL + 'getMACAddress'
+    param_list = {
+        'configurationId': confid,
+        'macAddress': macaddr,
+    }
+    req = requests.get(URL, headers=AuthHeader, params=param_list)
+    return req.json()
+
+
+
+'''
+
+Updating Objects
+
+Generic methods for updating an object.
+
+Updating an object involves two steps:
+    1. Building the object or parameter string used to update the object.
+    2. Performing the update.
+
+'''
+
+'''
+Update
+
+Updates entity objects.
+
+API call: All entity update statements follow this format:
+
+void update ( APIEntity entity )
+
+Parameter Description
+entity: The actual API entity passed as an entire object that has its mutable
+        values updated
+
+'''
+
+def update_object(entity):
+    URL = BaseURL + 'update'
+    req = requests.put(URL, headers=AuthHeader, json=entity)
+
+'''
+
+Update with Options
+
+Updates objects requiring a certain behavior that is not covered by the regular update() method. This
+method is currently used for CName, MX and SRV records, and the option is only applicable to these
+types.
+
+Output / Response: None
+
+API call:
+void updateWithOptions ( APIEntity entity, String options )
+
+Parameter Description
+
+    entity: The actual API entity to be updated.
+
+    options: A string containing the update options. Currently, only one option is
+             supported:
+
+                linkToExternalHost=boolean
+
+            If true, update will search for the external host record specified in
+            linkedRecordName even if a host record with the same exists under the same DNS View.
+            If the external host record is not present, it will throw an exception.
+            
+            If false, update will search for the host record specified in linkedRecordName
+
+'''
+
+def update_with_options(ent, opts):
+    URL = BaseURL + 'updateWithOptions'
+    req = requests.put(URL, headers=AuthHeader, json=ent)
+    return req.json()
+
+
+'''
+
+Deleting Objects
+
+Generic methods for deleting an object.
+There are two generic methods for getting entity values:
+    * Delete
+    * Delete with Options
+
+Delete:
+    Deletes an object using the generic delete() method.
+    
+Output / Response:
+    None.
+    
+API call:
+    Pass the entity ID from the database identifying the object to be deleted.
+    void delete ( long ObjectId )
+
+Parameter Description:
+    ObjectId The ID for the object to be deleted.
+
+Output / Response
+    None
+
+'''
+
+def delete(obj_id):
+    URL = BaseURL + 'delete'
+    param = {'objectId': obj_id}
+    req = requests.delete(URL, headers=AuthHeader, params=param)
+    if Debug:
+        print('delete request info:')
+        print('request URL: ', req.url)
+        print('server response ', req.text)
+    
+'''
+
+Delete with Options
+    Deletes objects that have options associated with their removal.
+    This method currently works only with the deletion of dynamic records
+    from the Address Manager database. When deleted, dynamic records present
+    the option of not dynamically deploying to DNS/DHCP Server.
+Output / Response
+    None.
+
+'''
+    
+
+def delete_with_options(obj_id, options):
+    URL = BaseURL + 'deleteWithOptions'
+    param_list = {
+        'objectId': obj_id,
+        'options': options
+    }
+    req = requests.delete(URL, headers=AuthHeader, params=param_list)
+
+
+'''
+
+Linked Entities
+
+Generic methods for getting, link or unlink entities.
+
+    * Get Linked Entities
+    * Link Entities
+    * Unlink Entities
+
+'''
+
+'''
+
+Get Linked Entities
+Returns an array of entities containing the entities linked to a specified entity.
+The array is empty if there are no linked entities.
+
+Output / Response
+Returns an array of entities. The array is empty if there are no linked entities.
+
+API call:
+APIEntity[] getLinkedEntities ( long entityId, String type, int start, int count)
+
+Parameter Description
+    entityId: The object ID of the entity for which to return linked entities.
+
+    type:   The type of linked entities which need to be returned.
+            This value must be one of the types listed in Object Types on page 209.
+
+! Attention:
+    * While specifying a resource record as the entityId, if you want to find
+    all the records (CNAME, MX, or SRV records) having links to this
+    record, you can use RecordWithLink for the type parameter.
+
+    * When specifying a MAC address as the entityId, this method
+    returns the IPv4 address associated with the MAC address. When
+    appropriate, leaseTimeand expiryTimeinformation also appears in
+    the returned properties string.
+
+    start: Indicates where in the list of returned objects to start returning objects.
+           The list begins at an index of 0. This value cannot be null or empty.
+
+    count: The maximum number of objects to return.
+
+'''
+
+def get_linked_entities(entId, typ, strt, cnt):
+    URL = BaseURL + 'getLinkedEntities'
+
+    param_list = {
+            'entityId': entId,
+            'type': typ,
+            'start': strt,
+            'count': cnt,
+    }
+
+    req = requests.get(URL, headers=AuthHeader, params=param_list)
+    return req.json()
 
 '''
 
@@ -560,7 +827,7 @@ on page 248 in the Property Options Reference section.
 E.g. parent object:
 
 {
-    'id': 2217650,
+    'id': 217650,
     'name': 'utoronto',
     'type': 'Zone',
     'properties': 'deployable=true|absoluteName=utoronto.ca|'
@@ -623,13 +890,6 @@ def get_configuration_setting(id, name):
     params = {'configurationId': id, 'settingName': name}
     req = requests.get(URL, headers=AuthHeader, params=params)
     return req.json()
-
-
-
-
-
-
-
 
 
 def get_ip4_address(ip, tok):
@@ -724,7 +984,7 @@ def add_zone(fqdn):
     if fqdn in TopLevelDomains:
         parent_id = ViewId
     else:
-        parent_id = get_object_id(parent_name(fqdn))
+        parent_id = get_id_by_name(parent_name(fqdn))
         info = get_entity_by_id(parent_id)
         if info['type'] != 'Zone':
             bam_error('The parent of', fqdn, 'is not a zone')
@@ -835,70 +1095,13 @@ def add_host_record(fqdn, ips, ttl, properties):
         print(req.text)
     return req.json()
 
-'''
-
-Deleting Objects
-
-Generic methods for deleting an object.
-There are two generic methods for getting entity values:
-• Delete
-• Delete with Options
-
-
-Delete:
-    Deletes an object using the generic delete() method.
-    
-Output / Response:
-    None.
-    
-API call:
-    Pass the entity ID from the database identifying the object to be deleted.
-    void delete ( long ObjectId )
-
-Parameter Description:
-    ObjectId The ID for the object to be deleted.
-
-'''
-
-def delete_object(obj_id):
-    URL = BaseURL + 'delete'
-    param_list = {'objectId': obj_id}
-    req = requests.delete(URL, headers=AuthHeader, params=param_list)
-    if Debug:
-        print('delete request info:')
-        print('request URL: ', req.url)
-        print('server response ', req.text)
-    return req.text
-    
-'''
-
-Delete with Options
-    Deletes objects that have options associated with their removal.
-    This method currently works only with the deletion of dynamic records
-    from the Address Manager database. When deleted, dynamic records present
-    the option of not dynamically deploying to DNS/DHCP Server.
-Output / Response
-    None.
-
-'''
-    
-
-def delete_with_options(obj_id, options):
-    URL = BaseURL + 'deleteWithOptions'
-    param_list = {
-        'objectId': obj_id,
-        'options': options
-    }
-    req = requests.delete(URL, headers=AuthHeader, params=param_list)
-    return req.text
-
 
 # Deletes all data and RRs in the Zone tree including other Zones
 
 def delete_zone(fqdn):
     zone_id = get_zone_id(fqdn)
     if zone_id:
-        val = delete_object(zone_id)
+        val = delete(zone_id)
         return val
 
 def get_host_records_by_hint(start, count, options):
@@ -997,36 +1200,54 @@ def parent_name(fqdn):
     return fqdn.split('.',1)[1]
 
 #
-# Get the Object info (Id and parentId) given a FQDN or a CIDR block
+# Get the information of an Entity (Id and parentId) given a FQDN or a CIDR block
 #
 
   
-def get_object_info(fqdn):
+def get_info_by_name(fqdn):
     id = ViewId
     names = fqdn.split('.')
     lg = len(names)
     for name in names[::-1]:
-        info = get_entity_by_name(id, name, 'Entity')
-        id = info['id']
+        ent = get_entity_by_name(id, name, 'Entity')
+        pid = id
+        id = ent['id']
         if Debug:
-            print(id, info)
-    return info
+            print(pid, id, ent)
+    ent['pid'] = pid
+    return ent
 
 
-def get_object_id(fqdn):
-    info = get_object_info(fqdn)
-    return info['id']
-    
+def get_id_by_name(fqdn):
+    ent = get_info_by_name(fqdn)
+    return ent['id']
+
+
+def get_pid_by_name(fqdn):
+    info = get_info_by_name(fqdn)
+    return info['pid']
+
+
+def get_pid_by_id(id):
+    ent = get_parent(id)
+    return ent['id']
+
+
+def get_info_by_id(id):
+    ent = get_entity_by_id(id)
+    pid = get_pid_by_id(id)
+    ent['pid'] = pid
+    return ent
+
 
 #
 # return the parent ID of an Object based on its name
 #
 
 
-def get_parent_id(fqdn):
-    parent_zone = parent_name(fqdn)
-    parent_id = get_object_id(parent_zone)
-    return parent_id
+def get_pid_by_name(fqdn):
+    info = get_info_by_name(fqdn)
+    return info['pid']
 
 
 def get_host_info(vid, fqdn):
@@ -1050,7 +1271,7 @@ def get_host_info(vid, fqdn):
 #
 
 def get_zone_id(fqdn):
-    info = get_object_info(fqdn)
+    info = get_info_by_name(fqdn)
     if info['type'] == 'Zone':
         return info['id']
     else:
@@ -1094,12 +1315,12 @@ def test_get_parent():
     
     print()
     for nm in ['goofy.zulu.org', 'frodo.utoronto.ca']:
-        pid = get_parent_id(nm)
+        pid = get_pid_by_name(nm)
         print(nm, 'has a parent id of', pid)
     
     print()
     for nm in ['goofy.zulu.org', 'frodo.utoronto.ca']:
-        id = get_object_id(nm)
+        id = get_id_by_name(nm)
         pinfo = get_parent(id)
         parent = parent_name(nm)
         print('Parent info for', parent, pinfo)
@@ -1137,7 +1358,7 @@ def add_zone_generic(fqdn):
     n = fqdn.split(dot)
     nm = n[0]
     subzone = dot.join(n[1:])
-    par_id = get_object_id(subzone)
+    par_id = get_id_by_name(subzone)
     props = 'deployable=true|'
     props += 'absoluteName=' + fqdn + '|'
     ent = {
@@ -1148,6 +1369,29 @@ def add_zone_generic(fqdn):
     val = add_entity(par_id, ent)
     return val
 
+# Takes a property list as a string e.g. 
+#   ttl=86400|absoluteName=fwsm-tabu.bkup.utoronto.ca|addresses=128.100.96.158|reverseRecord=true|
+# and returns it as a dictionary equivalent:
+#   {'ttl': '86400', 'absoluteName': 'fwsm-tabu.bkup.utoronto.ca', 'addresses': '128.100.96.158', 'reverseRecord': 'true'}
+
+def props2dict(str):
+    dd = {}
+    ll = str.split('|')
+    for i in ll[0:-1]:
+        kv = i.split('=')
+        dd[kv[0]] = kv[1]
+    return dd
+
+# Takes a property list as a dictionary e.g. 
+# {'ttl': '86400', 'absoluteName': 'fwsm-tabu.bkup.utoronto.ca', 'addresses': '128.100.96.158', 'reverseRecord': 'true'}
+# and returns it as a string equivalent:
+#   ttl=86400|absoluteName=fwsm-tabu.bkup.utoronto.ca|addresses=128.100.96.158|reverseRecord=true|
+
+def dict2props(d):
+    props = []
+    for k,v in d.items():
+        props.append('='.join([k,v]))
+    return '|'.join(props) + '|'
 
 def test_rr_functions():
 
@@ -1177,7 +1421,7 @@ def test_zone_functions():
     for z in ['yes.uoft.ca', 'no.uoft.ca']:
         ent = add_zone_generic(z)
         print(ent)
-        val = get_object_info(z)
+        val = get_info_by_name(z)
         print(val)
     
 #    print('Adding a Zone Template')
@@ -1214,7 +1458,7 @@ def test_generic_methods():
     test_get_parent()
     print()
     print('get object id')
-    id = get_object_id('goofy.ring.frodo.utoronto.ca')
+    id = get_id_by_name('goofy.ring.frodo.utoronto.ca')
     print(id)
 
 
@@ -1240,7 +1484,34 @@ def test_search_functions():
     test_category_search()
     print('\nSearch by Object Type')
     test_object_type_search()
-    
+
+# {'id': 2460953,
+#  'name': 'fwsm-tabu',
+#  'properties': 'ttl=86400|absoluteName=fwsm-tabu.bkup.utoronto.ca|addresses=128.100.96.158|reverseRecord=true|',
+#  'type': 'HostRecord'}
+
+def test_update():
+    print('Update')
+    id = 2460953
+    ent = get_entity_by_id(id)
+    props = ent['properties']
+    d = props2dict(props)
+    ttl = int(d['ttl']) - 3600
+    d['ttl'] = str(ttl) 
+    props2 = dict2props(d)
+    ent['properties'] = props2
+    update_object(ent)
+    print('View ID:', ViewId)
+    print('Configuration ID:', ConfigId)
+
+# test get_linked, linked and unlink
+
+def test_linked():
+    fqdn = 'utoronto.ca'
+    id = get_id_by_name(fqdn)
+    vals = get_linked_entities(id, 'RecordWithLink', 0, 10)
+    pprint(vals)
+
 def qwe():
     types = 'View,Zone,HostRecord,GenericRecord'
     types = 'Configuration,View'
@@ -1267,8 +1538,10 @@ def main():
         for item in sysinfo.split('|'):
             print(item)
 
-    test_search_functions()
+    test_linked()
     sys.exit()
+    test_update()
+    test_search_functions()
     test_zone_functions()
     test_generic_methods()
     
@@ -1305,8 +1578,8 @@ def main():
         pprint(res)
 
     fqdn = 'utoronto.ca'
-    obj_id = get_object_id(fqdn)
-    par_id = get_parent_id(obj_id)
+    obj_id = get_id_by_name(fqdn)
+    par_id = get_pid_by_id(obj_id)
     print(par_id)
 
     parent_id = Fqdn2Id(fqdn)
@@ -1327,15 +1600,15 @@ def main():
         print('\nAdd Host Response:')
         pprint(host_info)
 
-    obj_id = get_object_id('ca')
+    obj_id = get_id_by_name('ca')
     print(obj_id)
     print()
 
-    obj_id = get_object_id('utoronto.ca')
+    obj_id = get_id_by_name('utoronto.ca')
     print(obj_id)
     print()
 
-    obj_id = get_object_id('bozo.math.utoronto.ca')
+    obj_id = get_id_by_name('bozo.math.utoronto.ca')
     print(obj_id)
 
     host_info = get_host_info(view_id, 'mail.utoronto.ca')
@@ -1350,7 +1623,7 @@ def main():
         print('\nHost info for ' + fqdn + ':')
         pprint(host_info)
 
-    response = delete_object(host_id)
+    response = delete(host_id)
     pprint(response)
 
     response = bam_logout()
