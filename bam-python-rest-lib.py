@@ -174,8 +174,8 @@ Parameter Description
 
 def get_entity_by_name(id, name, type):
     URL = BaseURL + 'getEntityByName'
-    param_list = {'parentId': id, 'name': name, 'type': type}
-    req = requests.get(URL, headers=AuthHeader, params=param_list)
+    params = {'parentId': id, 'name': name, 'type': type}
+    req = requests.get(URL, headers=AuthHeader, params=params)
     return req.json()
     
 
@@ -203,9 +203,9 @@ Returns E.g.
 '''
 
 
-def get_entity_by_id(id):
+def get_entity_by_id(entityid):
     URL = BaseURL + 'getEntityById'
-    params = {'id': str(id)}
+    params = {'id': str(entityid)}
     req = requests.get(URL, headers=AuthHeader, params=params)
     return req.json()
 
@@ -239,14 +239,15 @@ Parameter Description:
     start:  Indicates where in the list of objects to start returning objects.
             The list begins at an index of 0.
     count:  Indicates the maximum number of child objects to return.
+            defaults to 10
 
 Returns a list of branch items given the root one level up
 
 '''
 
-def get_entities(id, type, start, count):
+def get_entities(parentid, type, start=0, count=10):
     URL = BaseURL + 'getEntities'
-    params = {'parentId': id, 'type': type, 'start': start, 'count': count}
+    params = {'parentId': parentid, 'type': type, 'start': start, 'count': count}
     req = requests.get(URL, headers=AuthHeader, params=params)
     return req.json()
 
@@ -271,9 +272,9 @@ Parameter Description:
 '''
 
 
-def get_parent(child_id):
+def get_parent(childid):
     URL = BaseURL + 'getParent'
-    params = {'entityId': str(child_id)}
+    params = {'entityId': str(childid)}
     req = requests.get(URL, headers=AuthHeader, params=params)
     return req.json()
 
@@ -413,17 +414,16 @@ The return is a list as follows
 
 '''
 
-def custom_search(fltrs, typ, strt, cnt):
+def custom_search(filters, type, start=0, count=10):
     URL = BaseURL + 'customSearch'
-    opts = ''
-    param_list = {
-            'filters': fltrs,
-            'type': typ,
-            'options': opts,
-            'start': strt,
-            'count': cnt,
+    params = {
+            'filters': filters,
+            'type': type,
+            'options': '',
+            'start': start,
+            'count': count,
     }
-    req = requests.get(URL, headers=AuthHeader, params=param_list)
+    req = requests.get(URL, headers=AuthHeader, params=params)
     return req.json()
 
 
@@ -456,17 +456,17 @@ Parameter Description:
 
 '''
 
-def search_by_category(key, cat, strt, stp):
+def search_by_category(key, category, start=0, count=10):
     URL = BaseURL + 'searchByCategory'
 
-    param_list = {
+    params = {
         'keyword': key,
-        'category': cat,
-        'start': strt,
-        'count': stp
+        'category': category,
+        'start': start,
+        'count': count
     }
 
-    req = requests.get(URL, headers=AuthHeader, params=param_list)
+    req = requests.get(URL, headers=AuthHeader, params=paramt)
     return req.json()
 
 
@@ -499,15 +499,15 @@ count: Maximum values to return. Default is 10
 '''
 
 
-def search_by_object_types(key, typs, strt, cnt):
+def search_by_object_types(key, types, start=0, count=10):
     URL = BaseURL + 'searchByObjectTypes'
-    param_list = {
+    params = {
         'keyword': key,
-        'types': typs,
-        'start': strt,
-        'count': cnt
+        'types': types,
+        'start': start,
+        'count': count
     }
-    req = requests.get(URL, headers=AuthHeader, params=param_list)
+    req = requests.get(URL, headers=AuthHeader, params=params)
     return req.json()
 
 
@@ -536,16 +536,16 @@ Parameter Description
 '''
 
 
-def get_entities_by_name(pid, name, typ, start, count):
+def get_entities_by_name(parentid, name, type, start=0, count=10):
     URL = BaseURL + 'getEntitiesByName'
-    param_list = {
-        'parentId': pid,
+    params = {
+        'parentId': parentid,
         'name': name,
-        'type': typ,
+        'type': type,
         'start': start,
         'count': count,
     }
-    req = requests.get(URL, headers=AuthHeader, params=param_list)
+    req = requests.get(URL, headers=AuthHeader, params=params)
     return req.json()
 
 '''
@@ -582,17 +582,17 @@ Parameters:
 
 '''
 
-def get_entities_by_name_using_options(pid, name, typ, start, count, opts):
+def get_entities_by_name_using_options(parentid, name, typ, options='false', start=0, count=10):
     URL = BaseURL + 'getEntitiesByNameUsingOptions'
-    param_list = {
-        'parentId': pid,
+    params = {
+        'parentId': parentid,
         'name': name,
-        'type': typ,
+        'type': type,
         'start': start,
         'count': count,
-        'options': opts,
+        'options': options,
     }
-    req = requests.get(URL, headers=AuthHeader, params=param_list)
+    req = requests.get(URL, headers=AuthHeader, params=params)
     return req.json()
 
 '''
@@ -620,11 +620,11 @@ Parameter Description
 
 def get_MAC_Address(confid, macaddr):
     URL = BaseURL + 'getMACAddress'
-    param_list = {
+    params = {
         'configurationId': confid,
         'macAddress': macaddr,
     }
-    req = requests.get(URL, headers=AuthHeader, params=param_list)
+    req = requests.get(URL, headers=AuthHeader, params=params)
     return req.json()
 
 
@@ -747,11 +747,11 @@ Output / Response
 
 def delete_with_options(obj_id, options):
     URL = BaseURL + 'deleteWithOptions'
-    param_list = {
+    params = {
         'objectId': obj_id,
         'options': options
     }
-    req = requests.delete(URL, headers=AuthHeader, params=param_list)
+    req = requests.delete(URL, headers=AuthHeader, params=params)
 
 
 '''
@@ -801,17 +801,17 @@ Parameter Description
 
 '''
 
-def get_linked_entities(entId, typ, strt, cnt):
+def get_linked_entities(entityid, type, start=0, count=10):
     URL = BaseURL + 'getLinkedEntities'
 
-    param_list = {
-            'entityId': entId,
-            'type': typ,
-            'start': strt,
-            'count': cnt,
+    params = {
+            'entityId': entityid,
+            'type': type,
+            'start': start,
+            'count': count,
     }
 
-    req = requests.get(URL, headers=AuthHeader, params=param_list)
+    req = requests.get(URL, headers=AuthHeader, params=params)
     return req.json()
 
 '''
@@ -989,13 +989,13 @@ def add_zone(fqdn):
         if info['type'] != 'Zone':
             bam_error('The parent of', fqdn, 'is not a zone')
     
-    param_list = {
+    params = {
             'parentId': parent_id,
             'absoluteName': fqdn,
             'properties': 'deployable=true',
     }
 
-    req = requests.post(URL, headers=AuthHeader, params=param_list)
+    req = requests.post(URL, headers=AuthHeader, params=params)
     return req.json()
     
 
@@ -1025,13 +1025,13 @@ Parameter Description:
 def add_zone_template(parent_id, name, properties):
     URL = BaseURL + 'addZoneTemplate'
     
-    param_list = {
+    params = {
         'parentId': parent_id,
         'name': name,
         'properties': properties,
     }
     
-    req = requests.post(URL, headers=AuthHeader, params=param_list)
+    req = requests.post(URL, headers=AuthHeader, params=params)
     return req.json()
 
 
@@ -1056,7 +1056,7 @@ rdata: Data for the RR in the BIND format
 
 def add_resource_record(fqdn, typ, rrdata, ttl, props):
     URL = BaseURL + 'addResourceRecord'
-    param_list = {
+    params = {
         'viewId': ViewId,
         'absoluteName': fqdn,
         'type': typ,
@@ -1064,7 +1064,7 @@ def add_resource_record(fqdn, typ, rrdata, ttl, props):
         'ttl': str(ttl),
         'properties': props
     }
-    req = requests.post(URL, headers=AuthHeader, params=param_list)
+    req = requests.post(URL, headers=AuthHeader, params=params)
     return req.json()
 
 #
@@ -1078,7 +1078,7 @@ def add_host_record(fqdn, ips, ttl, properties):
     if is_zone(fqdn):
         fqdn = '.' + fqdn
 
-    param_list = {
+    params = {
       'viewId': ViewId,
       'absoluteName': fqdn,
       'addresses': ips,
@@ -1087,9 +1087,9 @@ def add_host_record(fqdn, ips, ttl, properties):
     }
 
     if Debug:
-        pprint(param_list)
+        pprint(params)
 
-    req = requests.post(URL, headers=AuthHeader, params=param_list)
+    req = requests.post(URL, headers=AuthHeader, params=params)
     if Debug:
         print(req.url)
         print(req.text)
@@ -1104,24 +1104,99 @@ def delete_zone(fqdn):
         val = delete(zone_id)
         return val
 
-def get_host_records_by_hint(start, count, options):
+'''
+Get Host Record by Hint
+    Returns an array of objects with host record type.
+
+Output / Response
+    Returns an array of host record APIEntity objects.
+
+API call:
+    APIEntity[] getHostRecordsByHint ( int start, int count, String options)
+
+Parameters:
+
+    start:  Indicates where in the list of objects to start returning objects.
+            The list begins at an index of 0.
+    count:  Indicates the maximum of child objects that this method will return.
+            The value must be less than or equal to 10.
+
+    options: A string containing options. The supported options are hint and retrieveFields.
+        Multiple options can be separated by a | (pipe) character. For example:
+            hint=^abc|retrieveFields=false
+        If the hint option is not specified in the string, searching criteria will be based on
+        the same as zone host record. The following wildcards are supported in the hint option.
+
+        * ^—matches the beginning of a string. For example: ^ex matches example but not text.
+        * $—matches the end of a string. For example: ple$ matches example but not please.
+        * ^ $—matches the exact characters between the two wildcards. For example:
+            ^example$ only matches example.
+        * ?—matches any one character. For example: ex?t matches exit.
+        * *—matches one or more characters within a string.
+            For example: ex*t matches exit and excellent.
+
+        The default value for the retrieveFields option is set to false. If the option is set
+        to true, user-defined field will be returned. If the options string does not contain
+        retrieveFields, user-defined field will not be returned.
+
+'''
+
+def get_host_records_by_hint(options, start=0, count=10):
     URL = BaseURL + 'getHostRecordsByHint'
     params = {
+      'options': options,
       'start': start,
       'count': count,
-      'options': options
     }
     req = requests.get(URL, headers=AuthHeader, params=params)
     return req.json()
 
+'''
 
-def get_zones_by_hint(id, start, count, opts):
+Get Zones by Hint
+    Returns an array of accessible zones of child objects for a given containerId value.
+
+Output / Response
+    Returns an array of zones based on the input argument without their properties fields populated, or returns
+    an empty array if containerId is invalid. If no access right option is specified, the View access level will be
+    used by default.
+
+API Call:
+    APIEntity[] getZonesByHint( long containerId, int start, int count, String options )
+
+Parameters:
+    containerId: The object ID for the container object. It can be the object ID of any object in
+                 the parent object hierarchy. The highest parent object can be the configuration level.
+    start:  Indicates where in the list of objects to start returning objects.
+            The list begins at an index of 0.
+
+    count:  Indicates the maximum number of child objects that this method will return.
+            The maximum number of child objects cannot exceed more than 10.
+
+    options:
+    A string containing options. The Option names available in the ObjectProperties are:
+        ObjectProperties.hint, ObjectProperties.accessRight, and ObjectProperties.overrideType.
+        Multiple options can be separated by a | (pipe) character. For example:
+            hint=ab|overrideType=HostRecord|accessRight=ADD
+        The values for ObjectProperties.hint option can be the prefix of a zone name.  For example:
+            String options = ObjectProperties.hint + "=abc|"
+        The values for the ObjectProperties.accessRight and ObjectProperties.overrideType
+        options must be one of the constants listed in Access Right Values on page 189
+        and Object Types on page 209. For example:
+            String options = ObjectProperties.accessRight + "=" + AccessRightValues.AddAccess +
+                "|"+ ObjectProperties.overrideType + "=" + ObjectTypes.HostRecord;
+
+'''
+
+def get_zones_by_hint(containerid, start=0, count, options):
         URL = BaseURL + 'getZonesByHint'
+        if count > 10:
+            count = 10
         params = {
-            'containerId': id,
+            'containerId': containerid,
             'start': start,
             'count': count,
-            'options': opts
+            'options': options
         }
         req = requests.get(URL, headers=AuthHeader, params=params)
         return req.json()
@@ -1149,25 +1224,25 @@ Low level functions to manipulate the IP address space
 def add_IP4_Network(bid, cidr, props):
     URL = BaseURL + 'addIP4Network'
 
-    param_list = {
+    params = {
         'blockId': bid,
         'CIDR': cidr,
         'properties': props
     }
 
-    req = resquests.post(URL, headers=AuthHeader, params=param_list)
+    req = resquests.post(URL, headers=AuthHeader, params=params)
     return req.json()
 
 def add_IP4_Block_By_CIDR(pid, cidr, props):
     URL = BaseURL + 'addIP4BlockByCIDR'
     
-    param_list = {
+    params = {
             'parentId': pid,
             'CIDR': cidr,
             'properties': props
     }
 
-    req = resquests.post(URL, headers=AuthHeader, params=param_list)
+    req = resquests.post(URL, headers=AuthHeader, params=params)
     return req.json()
 
 
@@ -1538,8 +1613,13 @@ def main():
         for item in sysinfo.split('|'):
             print(item)
 
-    test_linked()
+    ents = get_host_records_by_hint('hint=^ra|retrieveFields=true', start=0, count=1)
+    pprint(ents)
+    ents = get_host_records_by_hint('hint=*x*', start=0, count=10)
+    pprint(ents)
     sys.exit()
+
+    test_linked()
     test_update()
     test_search_functions()
     test_zone_functions()
