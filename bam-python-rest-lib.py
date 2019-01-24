@@ -1188,7 +1188,7 @@ Parameters:
 
 '''
 
-def get_zones_by_hint(containerid, start=0, count, options):
+def get_zones_by_hint(containerid, options, start=0, count=1):
         URL = BaseURL + 'getZonesByHint'
         if count > 10:
             count = 10
