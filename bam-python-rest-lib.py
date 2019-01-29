@@ -255,19 +255,21 @@ def get_entities(parentid, type, start=0, count=10):
 '''
 
 Get Parent
-
-Returns the parent entity of a given entity.
+    Returns the parent entity of a given entity (referenced by Id).
 
 Output / Response
-Returns the APIEntity for the parent entity with its properties fields populated. For more information about
-the available options, refer to IPv4Objects on page 248 in the Property Options Reference section.
+    Returns the APIEntity for the parent entity with its properties fields populated.
+    For more information about the available options, refer to IPv4Objects
+    on page 248 in the Property Options Reference section.
 
-API call:
-    APIEntity getParent ( long entityId )
+E.g. parent object:
 
-Parameter Description:
-    entityId:   The Entity Id
-
+{
+    'id': 217650,
+    'name': 'utoronto',
+    'type': 'Zone',
+    'properties': 'deployable=true|absoluteName=utoronto.ca|'
+}
 
 '''
 
@@ -813,88 +815,137 @@ def get_linked_entities(entityid, type, start=0, count=10):
 
     req = requests.get(URL, headers=AuthHeader, params=params)
     return req.json()
+    
+'''
+
+Link Entities
+    Establishes a link between two specified Address Manager entities.
+Output / Response
+    None.
+
+API call:
+void linkEntities ( long entity1Id, long entity2Id, String properties )
+
+Parameter Description:
+
+entity1Id: The object ID of the first entity in the pair of linked entities.
+entity2Id: The object ID of the second entity in the pair of linked entities.
+properties: Adds object properties, including user-defined fields.
+
 
 '''
 
-Get Parent
-Returns the parent entity of a given entity (referenced by Id).
+def link_entities(entity1id, entitity2id, properties):
+    URL = BaseURL + 'linkEntities'
+    
+    params = {
+        'entity1Id': entity1id,
+        'entity2Id': entity2id,
+        'properties': properties
+    }
+    
+    req = requests.put(URL, headers=AuthHeader, params=params)
+    return req.json()
+
+'''
+Unlink Entities
+    Removes the link between two specified Address Manager entities.
+    
+Output / Response
+    None.
+
+This method works on the following types of objects and links:
+    Type of entity1Id   Type of entity2Id   Result
+    Any entity          Tag                 Removes the tag linked to the entity.
+    MACPool             MACAddress          Removes MAC address from MAC pool.
+    MACAddress          MACPool             Removes Mac Pool from MAC address.
+    User                UserGroup           Removes Group from User
+    UserGroup           User                Removes User from Group
+    etc...
+
+
+'''
+
+
+def unlink_entities(entity1id, entitity2id, properties):
+    URL = BaseURL + 'unlinkEntities'
+    
+    params = {
+        'entity1Id': entity1id,
+        'entity2Id': entity2id,
+        'properties': properties
+    }
+    
+    req = requests.put(URL, headers=AuthHeader, params=params)
+    return req.json()
+
+'''
+
+IPAM Functions
+
+Add IPv4 Block by CIDR
+    Adds a new IPv4 Block using CIDR notation.
 
 Output / Response
-Returns the APIEntity for the parent entity with its properties fields populated.
-For more information about the available options, refer to IPv4Objects
-on page 248 in the Property Options Reference section.
+    Returns the object ID for the new IPv4 block.
 
-E.g. parent object:
-
-{
-    'id': 217650,
-    'name': 'utoronto',
-    'type': 'Zone',
-    'properties': 'deployable=true|absoluteName=utoronto.ca|'
-}
+API call:
+    long addIP4BlockByCIDR ( long parentId, String CIDR, String properties )
+    
+Parameter Description:
+    parentId: The object ID of the target object’s parent object.
+    CIDR: The CIDR notation defining the block (for example, 10.10/16).
+    properties: A string containing options. For more information about the available
+                options, refer to IPv4Objects on page 248 in the
+                Property Options Reference section.
 
 
 '''
 
-def bam_error(err_str):
-    print(err_str)
-    sys.exit()
+def add_IP4_block_by_CIDR(parentid, cidr, properties):
+    URL = BaseURL + 'addIP4BlockByCIDR'
+    
+    params = {
+        'parentId': parentid,
+        'CIDR': cidr,
+        'properties': properties
+    }
+    
+    req = requests.post(URL, headers=AuthHeader, params=params)
+    return req.json()
 
+    
 
-def get_token():
-    URL = BaseURL + 'login'
-    req = requests.get(URL, params=Creds)
-    result = req.json().split()
-    return result[3]
+def assign_ip4Address(config_id, ip_addr, mac_addr, host_info, action, props):
+    URL = BaseURL + 'assignIP4Address'
+    params = {
+        'configurationId': config_id,
+        'ip4Address': ip_addr,
+        'macAddress': mac_addr,
+        'hostInfo': host_info,
+        'action': action,
+        'properties': props
+    }
+    req = requests.post(URL, headers=AuthHeader, params=params)
+    return req.json()
 
+'''
 
-def bam_init():
-    global AuthHeader
+Low level functions to manipulate the IP address space
 
-    tok = get_token()
+'''
 
-    AuthHeader = {
-      'Authorization': 'BAMAuthToken: ' + tok,
-      'Content-Type': 'application/json'
+def add_IP4_Network(bid, cidr, props):
+    URL = BaseURL + 'addIP4Network'
+
+    params = {
+        'blockId': bid,
+        'CIDR': cidr,
+        'properties': props
     }
 
-    set_config_id()
-    set_view_id()
-
-    if Debug:
-        print()
-        print('Authorization Header:', AuthHeader)
-        print('ConfigId for Configuration:', ConfigName, 'is:',  ConfigId)
-        print('ViewId for View:', ViewName, 'is:', ViewId)
-        print()
-
-def bam_logout():
-    URL = BaseURL + 'logout'
-    req = requests.get(URL, headers=AuthHeader)
+    req = resquests.post(URL, headers=AuthHeader, params=params)
     return req.json()
-
-
-def bam_error(err_str):
-    print(err_str)
-    sys.exit()
-
-
-def get_system_info():
-    URL = BaseURL + 'getSystemInfo'
-    req = requests.get(URL, headers=AuthHeader)
-    return req.json()
-
-
-def get_configuration_setting(id, name):
-    URL = BaseURL + 'getConfigurationSetting'
-    params = {'configurationId': id, 'settingName': name}
-    req = requests.get(URL, headers=AuthHeader, params=params)
-    return req.json()
-
-
-def get_ip4_address(ip, tok):
-    URL = BaseURL + 'getIP4Address'
-
 
 '''
 
@@ -936,7 +987,8 @@ def add_entity(parent_id, entity):
 
     req = requests.post(URL, headers=AuthHeader, params=params, json=entity)
     return req.json()
-    
+
+
 '''
 
 Add Zone: Adds DNS zones.
@@ -997,159 +1049,7 @@ def add_zone(fqdn):
 
     req = requests.post(URL, headers=AuthHeader, params=params)
     return req.json()
-    
 
-'''
-
-Add Zone Template
-    Adds a DNS zone template.
-
-Output / Response:
-    Returns the object ID of the new DNS zone template.
-
-API Call:
-long addZoneTemplate( long parentId, String name, String properties )
-
-Parameter Description:
-    parentId: The object ID of the parent DNS view when adding a view-level zone
-              template. The object ID of the configuration when adding
-              a configurationlevel zone template.
-    name: The name of the DNS zone template. This value can be an empty string ("").
-    
-    properties: Adds object properties, including user-defined fields.
-
-
-'''
-
-
-def add_zone_template(parent_id, name, properties):
-    URL = BaseURL + 'addZoneTemplate'
-    
-    params = {
-        'parentId': parent_id,
-        'name': name,
-        'properties': properties,
-    }
-    
-    req = requests.post(URL, headers=AuthHeader, params=params)
-    return req.json()
-
-
-'''
-
-Adding Resource Records  Description
-
-viewId: Object ID for the parent view
-
-absoluteName: Fully Qualified Domain Name
-
-type: One of
-    AliasRecord
-    HINFORecord
-    HOSTRecord (see add_host_record)
-    MXRecord
-    TXTRecord
-
-rdata: Data for the RR in the BIND format
-
-'''
-
-def add_resource_record(fqdn, typ, rrdata, ttl, props):
-    URL = BaseURL + 'addResourceRecord'
-    params = {
-        'viewId': ViewId,
-        'absoluteName': fqdn,
-        'type': typ,
-        'rdata': rrdata,
-        'ttl': str(ttl),
-        'properties': props
-    }
-    req = requests.post(URL, headers=AuthHeader, params=params)
-    return req.json()
-
-#
-# Add a host record, either and A or an A and a PTR
-#
-
-def add_host_record(fqdn, ips, ttl, properties):
-    URL = BaseURL + 'addHostRecord'
-
-# adding to the top level of the zone requires a leading dot
-    if is_zone(fqdn):
-        fqdn = '.' + fqdn
-
-    params = {
-      'viewId': ViewId,
-      'absoluteName': fqdn,
-      'addresses': ips,
-      'ttl': ttl,
-      'properties': properties
-    }
-
-    if Debug:
-        pprint(params)
-
-    req = requests.post(URL, headers=AuthHeader, params=params)
-    if Debug:
-        print(req.url)
-        print(req.text)
-    return req.json()
-
-
-# Deletes all data and RRs in the Zone tree including other Zones
-
-def delete_zone(fqdn):
-    zone_id = get_zone_id(fqdn)
-    if zone_id:
-        val = delete(zone_id)
-        return val
-
-'''
-Get Host Record by Hint
-    Returns an array of objects with host record type.
-
-Output / Response
-    Returns an array of host record APIEntity objects.
-
-API call:
-    APIEntity[] getHostRecordsByHint ( int start, int count, String options)
-
-Parameters:
-
-    start:  Indicates where in the list of objects to start returning objects.
-            The list begins at an index of 0.
-    count:  Indicates the maximum of child objects that this method will return.
-            The value must be less than or equal to 10.
-
-    options: A string containing options. The supported options are hint and retrieveFields.
-        Multiple options can be separated by a | (pipe) character. For example:
-            hint=^abc|retrieveFields=false
-        If the hint option is not specified in the string, searching criteria will be based on
-        the same as zone host record. The following wildcards are supported in the hint option.
-
-        * ^—matches the beginning of a string. For example: ^ex matches example but not text.
-        * $—matches the end of a string. For example: ple$ matches example but not please.
-        * ^ $—matches the exact characters between the two wildcards. For example:
-            ^example$ only matches example.
-        * ?—matches any one character. For example: ex?t matches exit.
-        * *—matches one or more characters within a string.
-            For example: ex*t matches exit and excellent.
-
-        The default value for the retrieveFields option is set to false. If the option is set
-        to true, user-defined field will be returned. If the options string does not contain
-        retrieveFields, user-defined field will not be returned.
-
-'''
-
-def get_host_records_by_hint(options, start=0, count=10):
-    URL = BaseURL + 'getHostRecordsByHint'
-    params = {
-      'options': options,
-      'start': start,
-      'count': count,
-    }
-    req = requests.get(URL, headers=AuthHeader, params=params)
-    return req.json()
 
 '''
 
@@ -1202,48 +1102,310 @@ def get_zones_by_hint(containerid, options, start=0, count=1):
         return req.json()
 
 
-def assign_ip4Address(config_id, ip_addr, mac_addr, host_info, action, props):
-    URL = BaseURL + 'assignIP4Address'
+'''
+
+Add Zone Template
+    Adds a DNS zone template.
+
+Output / Response:
+    Returns the object ID of the new DNS zone template.
+
+API Call:
+long addZoneTemplate( long parentId, String name, String properties )
+
+Parameter Description:
+    parentId: The object ID of the parent DNS view when adding a view-level zone
+              template. The object ID of the configuration when adding
+              a configurationlevel zone template.
+    name: The name of the DNS zone template. This value can be an empty string ("").
+    
+    properties: Adds object properties, including user-defined fields.
+
+
+'''
+
+
+def add_zone_template(parent_id, name, properties):
+    URL = BaseURL + 'addZoneTemplate'
+    
     params = {
-        'configurationId': config_id,
-        'ip4Address': ip_addr,
-        'macAddress': mac_addr,
-        'hostInfo': host_info,
-        'action': action,
+        'parentId': parent_id,
+        'name': name,
+        'properties': properties,
+    }
+    
+    req = requests.post(URL, headers=AuthHeader, params=params)
+    return req.json()
+    
+
+'''
+
+Adding Resource Records  Description
+
+viewId: Object ID for the parent view
+
+absoluteName: Fully Qualified Domain Name
+
+type: One of
+    AliasRecord
+    HINFORecord
+    HOSTRecord (see add_host_record)
+    MXRecord
+    TXTRecord
+
+rdata: Data for the RR in the BIND format
+
+'''
+
+def add_resource_record(fqdn, typ, rrdata, ttl, props):
+    URL = BaseURL + 'addResourceRecord'
+    params = {
+        'viewId': ViewId,
+        'absoluteName': fqdn,
+        'type': typ,
+        'rdata': rrdata,
+        'ttl': str(ttl),
         'properties': props
     }
     req = requests.post(URL, headers=AuthHeader, params=params)
     return req.json()
 
-'''
-
-Low level functions to manipulate the IP address space
 
 '''
 
-def add_IP4_Network(bid, cidr, props):
-    URL = BaseURL + 'addIP4Network'
+Host Records
+A host record, or A record, designates an IP address for a device.
+A new host requires a name and an IP address. Multiple addresses may exist
+for the same device. Set the time-to-live for this record to an override value
+here so that the record has a longer or shorter ttl. A comment field is also included.
 
-    params = {
-        'blockId': bid,
-        'CIDR': cidr,
-        'properties': props
-    }
 
-    req = resquests.post(URL, headers=AuthHeader, params=params)
-    return req.json()
+Add Host Record
+Adds host records for IPv4 or IPv6 addresses. All addresses must be valid addresses.
+This method will add the record under a zone. In order to add records under templates,
+you must use Add Entity for Resource Records on page 124.
+When adding a host record, the reverseRecord property, if not explicitly set
+in the properties string, is set to true and Address Manager creates
+a reverse record automatically. IPv4 addresses can be added in both
+workflow and non-workflow mode. IPv6 addresses can be added in non-workflow mode only.
+For more information on workflow mode, see Workflow Change Requests on page 182.
 
-def add_IP4_Block_By_CIDR(pid, cidr, props):
-    URL = BaseURL + 'addIP4BlockByCIDR'
+Output / Response
+Returns the object ID for the new host resource record.
+API call:
+long addHostRecord(long viewId, String absoluteName, String addresses,
+                    long ttl, String properties)
+
+Parameters:
+
+    viewId: The object ID for the parent view to which this record is being added.
     
+    absoluteName: The FQDN for the host record. If you are adding a record in a zone
+                  that is linked to a incremental Naming Policy,
+                  a single hash (#) sign must be added at the appropriate location
+                  in the FQDN. Depending on the policy order value,
+                  the location of the single hash (#) sign varies.
+    addresses: A list of comma-separated IP addresses
+                (for example, 10.0.0.5,130.4.5.2).
+    
+    ttl: The time-to-live value for the record.
+         To ignore the ttl, set this value to -1.
+         
+    properties:  Adds object properties, including comments and user-defined fields.
+
+'''
+
+
+def add_host_record(fqdn, ips, ttl, properties):
+    URL = BaseURL + 'addHostRecord'
+
+# adding to the top level of the zone requires a leading dot
+    if is_zone(fqdn):
+        fqdn = '.' + fqdn
+
     params = {
-            'parentId': pid,
-            'CIDR': cidr,
-            'properties': props
+      'viewId': ViewId,
+      'absoluteName': fqdn,
+      'addresses': ips,
+      'ttl': ttl,
+      'properties': properties
     }
 
-    req = resquests.post(URL, headers=AuthHeader, params=params)
+    if Debug:
+        pprint(params)
+
+    req = requests.post(URL, headers=AuthHeader, params=params)
+    if Debug:
+        print(req.url)
+        print(req.text)
     return req.json()
+
+
+'''
+
+Add Bulk Host Records
+
+Adds host records using auto-increment from the specific starting address.
+This method will add the record under a zone. In order to add records under templates,
+you must use Add Entity for Resource Records on page 124.
+This method adds host records to a zone linked to a DNS naming policy,
+each with an IP address autoincremented starting from a specific address in a network.
+
+Output / Response
+Returns an array of host record APIEntity objects based on available addresses and number of IP
+addresses required. If no addresses are available, an error will be shown.
+API call:
+APIEntity[] addBulkHostRecord ( long viewId, String absoluteName, long ttl, long
+networkId, String startAddress, int numberOfAddresses, String properties)
+
+Parameter Description
+viewId The object ID for the parent view to which this record is being added.
+absoluteName The FQDN for the host record. If you are adding a record in a zone that is linked
+to a incremental Naming Policy, a single hash (#) sign must be added at the
+appropriate location in the FQDN. Depending on the policy order value, the
+location of the single hash (#) sign varies.
+ttl The time-to-live value for the record. To ignore the ttl, set this value to -1.
+networkId The network which to get the available IP addresses. Each address is used for
+one host record.
+startAddress The starting IPv4 address for getting the available addresses.
+numberOfAddresses The number of addresses.
+properties excludeDHCPRange=true/false, if true then IP addresses within a DHCP
+range will be skipped. This argument can also contain user-defined fields.
+
+
+'''
+
+Get Host Record by Hint
+    Returns an array of objects with host record type.
+
+Output / Response
+    Returns an array of host record APIEntity objects.
+
+API call:
+    APIEntity[] getHostRecordsByHint ( int start, int count, String options)
+
+Parameters:
+
+    start:  Indicates where in the list of objects to start returning objects.
+            The list begins at an index of 0.
+    count:  Indicates the maximum of child objects that this method will return.
+            The value must be less than or equal to 10.
+
+    options: A string containing options. The supported options are hint and retrieveFields.
+        Multiple options can be separated by a | (pipe) character. For example:
+            hint=^abc|retrieveFields=false
+        If the hint option is not specified in the string, searching criteria will be based on
+        the same as zone host record. The following wildcards are supported in the hint option.
+
+        * ^—matches the beginning of a string. For example: ^ex matches example but not text.
+        * $—matches the end of a string. For example: ple$ matches example but not please.
+        * ^ $—matches the exact characters between the two wildcards. For example:
+            ^example$ only matches example.
+        * ?—matches any one character. For example: ex?t matches exit.
+        * *—matches one or more characters within a string.
+            For example: ex*t matches exit and excellent.
+
+        The default value for the retrieveFields option is set to false. If the option is set
+        to true, user-defined field will be returned. If the options string does not contain
+        retrieveFields, user-defined field will not be returned.
+
+'''
+
+def get_host_records_by_hint(options, start=0, count=10):
+    URL = BaseURL + 'getHostRecordsByHint'
+    params = {
+      'options': options,
+      'start': start,
+      'count': count,
+    }
+    req = requests.get(URL, headers=AuthHeader, params=params)
+    return req.json()
+
+
+def get_system_info():
+    URL = BaseURL + 'getSystemInfo'
+    req = requests.get(URL, headers=AuthHeader)
+    return req.json()
+
+
+def get_configuration_setting(id, name):
+    URL = BaseURL + 'getConfigurationSetting'
+    params = {'configurationId': id, 'settingName': name}
+    req = requests.get(URL, headers=AuthHeader, params=params)
+    return req.json()
+
+
+
+
+'''
+
+Higher Level Functions
+
+'''
+
+def bam_error(err_str):
+    print(err_str)
+    sys.exit()
+
+
+def get_token():
+    URL = BaseURL + 'login'
+    req = requests.get(URL, params=Creds)
+    result = req.json().split()
+    return result[3]
+
+
+def bam_init():
+    global AuthHeader
+
+    tok = get_token()
+
+    AuthHeader = {
+      'Authorization': 'BAMAuthToken: ' + tok,
+      'Content-Type': 'application/json'
+    }
+
+    set_config_id()
+    set_view_id()
+
+    if Debug:
+        print()
+        print('Authorization Header:', AuthHeader)
+        print('ConfigId for Configuration:', ConfigName, 'is:',  ConfigId)
+        print('ViewId for View:', ViewName, 'is:', ViewId)
+        print()
+
+def bam_logout():
+    URL = BaseURL + 'logout'
+    req = requests.get(URL, headers=AuthHeader)
+    sys.exit()
+
+
+def bam_error(err_str):
+    print(err_str)
+    sys.exit()
+
+def get_ip4_address(ip, tok):
+    URL = BaseURL + 'getIP4Address'
+
+
+
+
+    
+
+
+
+
+
+
+# Deletes all data and RRs in the Zone tree including other Zones
+
+def delete_zone(fqdn):
+    zone_id = get_zone_id(fqdn)
+    if zone_id:
+        val = delete(zone_id)
+        return val
+
 
 
 #
@@ -1587,6 +1749,13 @@ def test_linked():
     vals = get_linked_entities(id, 'RecordWithLink', 0, 10)
     pprint(vals)
 
+def test_ipam():
+    parentid = 2205986
+    cidr = '1.2/16'
+    properties = 'locationCode=CA TOR UOT'
+    vals = add_IP4_block_by_CIDR(parentid, cidr, properties)
+    pprint(vals)
+
 def qwe():
     types = 'View,Zone,HostRecord,GenericRecord'
     types = 'Configuration,View'
@@ -1613,6 +1782,10 @@ def main():
         for item in sysinfo.split('|'):
             print(item)
 
+    test_ipam()
+    bam_logout()
+    
+    
     ents = get_host_records_by_hint('hint=^ra|retrieveFields=true', start=0, count=1)
     pprint(ents)
     ents = get_host_records_by_hint('hint=*x*', start=0, count=10)
