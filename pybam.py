@@ -6,7 +6,6 @@
 '''
 
 RESTful Python API for BAM
-
 REST WADL: https://proteus.utoronto.ca/Services/REST/application.wadl
 
 From JumpStart to BAM
@@ -78,6 +77,7 @@ ConfigId = 0
 ViewId = 0
 
 ConfigName = 'Test'
+ConfigName = 'Production'
 ViewName = 'Public'
 
 AuthHeader = {}
@@ -1352,9 +1352,12 @@ def bam_error(err_str):
 def get_token():
     URL = BaseURL + 'login'
 
-    uname = input('Username: ')
-    pw = getpass.getpass()
-    Creds = {'username': uname, 'password': pw}
+    if Debug:
+        Creds = creds_ro
+    else:
+        uname = input('Username: ')
+        pw = getpass.getpass()
+        Creds = {'username': uname, 'password': pw}
     pprint(Creds)
 
     req = requests.get(URL, params=Creds)
@@ -1424,6 +1427,7 @@ def set_config_id():
     global ConfigId
 
     config_info = get_entity_by_name(RootId, ConfigName, 'Configuration')
+    pprint(config_info)
     ConfigId = config_info['id']
 
 def set_view_id():
@@ -1431,6 +1435,8 @@ def set_view_id():
 
     if ConfigId > 0:
         view_info = get_entity_by_name(ConfigId, ViewName, 'View')
+        if Debug:
+            pprint(view_info)
         ViewId = view_info['id']
     else:
         print('Error: The parent (Configuration) Id must be set before setting the View Id')
@@ -1456,8 +1462,6 @@ def get_info_by_name(fqdn):
         ent = get_entity_by_name(id, name, 'Entity')
         pid = id
         id = ent['id']
-        if Debug:
-            print(pid, id, ent)
     ent['pid'] = pid
     return ent
 
@@ -1520,66 +1524,6 @@ def get_zone_id(fqdn):
         return info['id']
     else:
         print(fqdn, 'is not a zone')
-
-
-def test_get_entity_by_name():
-    id = RootId
-
-    lst = ['Test', 'Public', 'ca', 'utoronto', 'frodo', 'ring', 'goofy']
-    for nm in lst:
-        type = get_entity_by_name(id, nm, 'Entity')['type']
-        info = get_entity_by_name(id, nm, type)
-        type = info['type']
-        props = info['properties']
-        id = info['id']
-        print('name', nm, 'id', id, 'type', type, 'properties', props)
-
-
-def test_get_entity_by_id():
-    for id in [2200891, 2203565, 2217649, 2217650, 2512206, 2512207, 2516972]:
-        vals = get_entity_by_id(id)
-        pprint(vals)
-
-def test_get_entities():
-    print('\nGetEntities')
-    vals = get_entities(2512207, 'GenericRecord', 0, 20)
-    pprint(vals)
-    print('\nGet Entities by Name')
-    info = get_entities_by_name(2512207, "", 'GenericRecord', 0, 10)
-    pprint(info)
-    print('\nGet Entity by Name')
-    info = get_entity_by_name(2512207, "", 'GenericRecord')
-    pprint(info)
-
-def test_get_parent():
-    for objid in [2510060, 2512206, 2217649]:
-        vals = get_parent(objid)
-        print('child id', objid)
-        print('parent object',vals)
-    
-    print()
-    for nm in ['goofy.zulu.org', 'frodo.utoronto.ca']:
-        pid = get_pid_by_name(nm)
-        print(nm, 'has a parent id of', pid)
-    
-    print()
-    for nm in ['goofy.zulu.org', 'frodo.utoronto.ca']:
-        id = get_id_by_name(nm)
-        pinfo = get_parent(id)
-        parent = parent_name(nm)
-        print('Parent info for', parent, pinfo)
-
-
-# Tests for Searching for and Retrieving Entities
-
-def test_custom_search():
-    filters = ['ttl=86400']
-    vars = custom_search(filters, 'MXRecord', 0, 25)
-    pprint(vars)
-
-    filters = ['recordType=A', 'rdata=128.100.103*']
-    vars = custom_search(filters, 'GenericRecord', 0, 15)
-    pprint(vars)
 
 #
 # is_zone takes a name/fqdn as input and returns: False

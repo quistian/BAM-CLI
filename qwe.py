@@ -2,8 +2,65 @@
 
 # vim: tabstop=8 expandtab shiftwidth=4 softtabstop=4
 
+import csv
 import pybam
 from pprint import pprint
+
+def process_bulk_data(fname):
+    fieldnames = ['action', 'fqdn', 'ttl', 'rr_type', 'value']
+    with open(fname) as csv_file:
+        data = csv.DictReader(csv_file, delimiter=',', fieldnames=fieldnames, skipinitialspace=True)
+        for row in data:
+            row['fqdn'] = row['fqdn'].strip('.').lower()
+            action = row['action']
+            if action == 'update':
+                if 'athletics' in row['fqdn']:
+                    update_rr(row)
+
+def update_rr(data):
+    pprint(data)
+    fqdn = data['fqdn']
+    ent = pybam.get_info_by_name(fqdn)
+    pprint(ent)
+    pid = ent['pid']
+    if ent['type'] == 'Zone':
+        key = fqdn.split('.')[0]
+        vars = pybam.search_by_category(key, 'RESOURCE_RECORD', 0, 5)
+        pprint(vars)
+#        vals = pybam.search_by_object_types(key, 'GenericRecord', 0, 5)
+#        pprint(vals)
+    data = pybam.get_entity_by_id(2443015)
+    pprint(data)
+
+
+def test_get_entity_by_name():
+    id = RootId
+
+    lst = ['Test', 'Public', 'ca', 'utoronto', 'frodo', 'ring', 'goofy']
+    for nm in lst:
+        type = get_entity_by_name(id, nm, 'Entity')['type']
+        info = get_entity_by_name(id, nm, type)
+        type = info['type']
+        props = info['properties']
+        id = info['id']
+        print('name', nm, 'id', id, 'type', type, 'properties', props)
+
+def test_get_entity_by_id():
+    for id in [2200891, 2203565, 2217649, 2217650, 2512206, 2512207, 251697]:
+        vals = get_entity_by_id(id)
+        pprint(vals)
+
+def test_get_entities():
+    print('\nGetEntities')
+    vals = get_entities(2512207, 'GenericRecord', 0, 20)
+    pprint(vals)
+    print('\nGet Entities by Name')
+    info = get_entities_by_name(2512207, "", 'GenericRecord', 0, 10)
+    pprint(info)
+    print('\nGet Entity by Name')
+    info = get_entity_by_name(2512207, "", 'GenericRecord')
+    pprint(info)
+
 
 def test_get_parent():
     for objid in [2510060, 2512206, 2217649]:
@@ -163,18 +220,25 @@ def test_category_search():
     entities = pybam.search_by_category('cs.utoronto.ca', pybam.Categories['all'], 0, 20)
     pprint(entities)
 
+# {'id': 2460953,
+# 'name': 'fwsm-tabu',
+#  'properties': 'ttl=79200|absoluteName=fwsm-tabu.bkup.utoronto.ca|addresses=128.100.96.158|reverseRecord=true|'
+
 def test_object_type_search():
     types = 'View,Zone,HostRecord,GenericRecord'
-    vars = pybam.search_by_object_types('*ab*', types, 0, 100)
-    pprint(vars)
+    types = 'Zone,GenericRecord'
+    vars = pybam.search_by_object_types('*e*', types, 0, 100)
+    for var in vars:
+        if var['type'] == 'GenericRecord':
+            pprint(var['properties'])
 
 def test_search_functions():
     print('Custom Search')
     test_custom_search()
-    print('\nSearch by Category')
-    test_category_search()
-    print('\nSearch by Object Type')
-    test_object_type_search()
+#    print('\nSearch by Category')
+#   test_category_search()
+#   print('\nSearch by Object Type')
+#   test_object_type_search()
 
 # {'id': 2460953,
 #  'name': 'fwsm-tabu',
@@ -235,7 +299,9 @@ def main():
     for item in sysinfo.split('|'):
         print(item)
 
-    test_search_functions()
+    process_bulk_data('update.txt')
+
+#   test_search_functions()
 
     pybam.bam_logout()
     
