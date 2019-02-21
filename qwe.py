@@ -92,37 +92,6 @@ def test_custom_search():
     vars = pybam.custom_search(filters, 'GenericRecord', 0, 15)
     pprint(vars)
 
-#
-# is_zone takes a name/fqdn as input and returns: False
-# if it is not a zone, otherwise the object_Id of the zone
-#
-
-def is_zone(fqdn):
-
-    vals = pybam.search_by_object_types(fqdn, 'Zone', 0, 3)
-    return vals
-
-#
-# Add a zone using the generic add_generic call rather than
-# the specific add_zone()one
-#
-
-    
-def add_zone_generic(fqdn):
-    dot = '.'
-    n = fqdn.split(dot)
-    nm = n[0]
-    subzone = dot.join(n[1:])
-    par_id = pybam.get_id_by_name(subzone)
-    props = 'deployable=true|'
-    props += 'absoluteName=' + fqdn + '|'
-    ent = {
-        'name': nm,
-        'type': 'Zone',
-        'properties': props
-    }
-    val = pybam.add_entity(par_id, ent)
-    return val
 
 # Takes a property list as a string e.g. 
 #   ttl=86400|absoluteName=fwsm-tabu.bkup.utoronto.ca|addresses=128.100.96.158|reverseRecord=true|

@@ -13,22 +13,21 @@ User Group Webinar - Making APIs Work for You - Episode 1
 
 - Web Layer and API Layer
 
-- Connect -> Login -> API Calls -> Logout
+	Connect -> Login -> API Calls -> Logout
 
-- SOAP one session, and then at end closes
+	SOAP one session, and then at end closes
 
-- REST single shot sessions as request and responses
+	REST single shot sessions as request and responses
 
-- URLs contain action verbs: Service, Create, Read, Update, Delete
+	URLs contain action verbs: Service, Create, Read, Update, Delete
 
-- API account is the same as a normal user account (hybrid as well)
+	API account is the same as a normal user account (hybrid as well)
 
 - Logs -> /var/log/Server.log
 
-- API calls are small unit operations
-  each with custom input and output
+- API calls are small unit operations each with custom input and output
 
-- To send NULL values use e.g. var = ""
+- To send NULL values use e.g. var = ''
 
 - BAM v8.1.0 and present support REST
 
@@ -57,9 +56,10 @@ uname = 'api-test-user2'
 pw = 't5e6s7t8'
 creds_rw = {'username': uname, 'password': pw}
 
+
 '''
 
-Global Variables:
+Global Variables convention:
     * start with UpperCase
     * have no _ character
     * may have mid UpperCase words
@@ -71,7 +71,8 @@ Debug = True
 
 Creds = creds_rw
 
-BaseURL = "https://proteus.utoronto.ca/Services/REST/v1/"
+BaseURL = 'https://proteus.utoronto.ca/Services/REST/v1/'
+
 RootId = 0
 ConfigId = 0
 ViewId = 0
@@ -132,7 +133,7 @@ Categories = {
     'ServerGroup': 'SERVERGROUP',
 }
 
-TopLevelDomains = ['ca', 'edu', 'org', 'net', 'com', 'int' ]
+TopLevelDomains = ['ca', 'edu', 'org', 'net', 'com', 'int', 'us' ]
 
 '''
 
@@ -1344,10 +1345,6 @@ Higher Level Functions
 
 '''
 
-def bam_error(err_str):
-    print(err_str)
-    sys.exit()
-
 
 def get_token():
     URL = BaseURL + 'login'
@@ -1366,17 +1363,16 @@ def get_token():
 
 
 def bam_init():
-    global AuthHeader
+    global AuthHeader, ConfigId, ViewId
 
     tok = get_token()
-
     AuthHeader = {
       'Authorization': 'BAMAuthToken: ' + tok,
       'Content-Type': 'application/json'
     }
 
-    set_config_id()
-    set_view_id()
+    ConfigId = get_config_id(ConfigName)
+    ViewId = get_view_id(ViewName)
 
     if Debug:
         print()
@@ -1399,15 +1395,6 @@ def get_ip4_address(ip, tok):
     URL = BaseURL + 'getIP4Address'
 
 
-
-
-    
-
-
-
-
-
-
 # Deletes all data and RRs in the Zone tree including other Zones
 
 def delete_zone(fqdn):
@@ -1423,24 +1410,22 @@ def delete_zone(fqdn):
 #
 
 
-def set_config_id():
-    global ConfigId
+def get_config_id(config_name):
+    config_info = get_entity_by_name(RootId, config_name, 'Configuration')
+    if Debug:
+    	pprint(config_info)
+    return config_info['id']
 
-    config_info = get_entity_by_name(RootId, ConfigName, 'Configuration')
-    pprint(config_info)
-    ConfigId = config_info['id']
 
-def set_view_id():
-    global ViewId
-
+def get_view_id(view_name):
     if ConfigId > 0:
-        view_info = get_entity_by_name(ConfigId, ViewName, 'View')
+        view_info = get_entity_by_name(ConfigId, view_name, 'View')
         if Debug:
             pprint(view_info)
-        ViewId = view_info['id']
+        return view_info['id']
     else:
-        print('Error: The parent (Configuration) Id must be set before setting the View Id')
-        sys.exit()
+        bam_error('Error: The parent (Configuration) Id must be set before setting the View Id')
+
         
 #
 # given andy.bozo.cathy.dan.ca it returns bozo.cathy.dan.ca
