@@ -6,6 +6,45 @@ import csv
 import pybam
 from pprint import pprint
 
+
+def rr_exec(text):
+    print('input:', text)
+    command = text.split(' ')
+    func = command[0]
+    args = ','.join(command[1:])
+    print('function:', func)
+    print('args:', args)
+    if func in functions:
+#       functions[func](args)
+        eval(func + '(' + args + ')')
+
+def add_TXT_rr(fqdn, value, ttl):
+    props = 'comments=None|'
+    obj_id = pybam.add_TXT_Record(pybam.ViewId, fqdn, value, ttl, props)
+    print(obj_id)
+
+def add_A_rr(fqdn, value, ttl):
+    props = 'comments=None|'
+    obj_id = pybam.add_Generic_Record(pybam.ViewId, fqdn, 'A', value, ttl, props)
+    print(obj_id)
+
+def add_MX_rr(fqdn, value, ttl):
+    props = 'comments=None|'
+    mx = value.split()
+    obj_id = pybam.add_MX_Record(pybam.ViewId, fqdn, mx[0], mx[1], ttl, props)
+    print(obj_id)
+
+def add_CNAME_rr(fqdn, value, ttl):
+    props = 'comments=None|'
+    obj_id = pybam.add_Alias_Record(pybam.ViewId, fqdn, value, ttl, props)
+    print(obj_id)
+
+functions = {
+        'add_TXT_rr': add_TXT_rr,
+        'add_A_rr': add_A_rr,
+        'add_MX_rr': add_MX_rr,
+}
+
 def process_bulk_data(fname):
     fieldnames = ['action', 'fqdn', 'ttl', 'rr_type', 'value']
     with open(fname) as csv_file:
@@ -13,24 +52,172 @@ def process_bulk_data(fname):
         for row in data:
             row['fqdn'] = row['fqdn'].strip('.').lower()
             action = row['action']
-            if action == 'update':
-                if 'athletics' in row['fqdn']:
+            fqdn = row['fqdn']
+            if 'uoft.ca' in row['fqdn']:
+                if action == 'update':
                     update_rr(row)
+                if action == 'add':
+                    if pybam.is_zone(row['fqdn']):
+                        add_generic_rr(row)
+                    else:
+                        rr_type = row['rr_type']
+                        value = row['value']
+                        ttl = row['ttl']
+                        func_str = action + '_' + rr_type + '_rr'
+                        fqdn_str = '"' + fqdn + '"'
+                        value_str = '"' + value + '"'
+                        ttl_str = '"' + ttl + '"'
+                        func_args = [fqdn_str,value_str,ttl_str]
+                        func_args_str = ','.join(func_args)
+                        eval_str = func_str + '(' + func_args_str + ')'
+                        eval(eval_str)
+                if action == 'delete':
+                    delete_rr(row)
+                if action == 'get':
+                    get_rr(row)
+
+#
+# do a probe/get to see if a given RR exists in BAM
+# if it does return its Entity ID otherwise return False
+
+def get_rr(data):
+    if pybam.Debug:
+        print()
+        print('Exists?')
+        print('input data:', data)
+    object_walk(data['fqdn'])
+
+def object_walk(fqdn):
+    print('Object Name:', fqdn)
+    names = fqdn.split('.')
+    tld = names.pop()
+    tld_ent = pybam.get_entity_by_name(pybam.ViewId, tld, 'Zone')
+    pid = tld_ent['id']
+    pname = tld
+    while (len(names)):
+        name = names.pop()
+        ent = pybam.get_entity_by_name(pid, name, 'Entity')
+        obj_id = ent['id']
+        obj_ent = pybam.get_entity_by_id(obj_id)
+        print('obj_ent:', obj_ent)
+        for type in pybam.RRObjectTypes:
+            ents = pybam.get_entities(pid, type, 0, 100)
+            if len(ents):
+                print('Entities of Obj Type:', type, 'Associated with parent:', pname)
+                for ent in ents:
+                    print('\tEnt:', ent)
+                print()
+        pid = obj_id
+        pname = obj_ent['name']
+
+'''
+
+GenericRecord:
+    'id': 2519649, 'name': '', 'type': 'GenericRecord',
+    'properties': 'ttl=3666|absoluteName=yes.uoft.ca|type=A|rdata=3.2.3.4|'
+
+TXTRecord
+    'id': 2519630, 'name': '', 'type': 'TXTRecord',
+    'properties': 'comments=Zone Information|ttl=7600|absoluteName=yes.uoft.ca|txt=STOP GO|'}
+
+'''
+
+def add_generic_rr(data):
+    if pybam.Debug:
+        print()
+        print('input data:', data)
+    fqdn = data['fqdn']
+    rr_type = data['rr_type']
+    ent = pybam.get_info_by_name(fqdn)
+    if pybam.Debug:
+        print('Entity associated with', fqdn, ent)
+    pid = ent['pid']
+    obj_id = ent['id']
+    if obj_id > 0:
+        pid = obj_id
+        if rr_type == 'A':
+            d = {
+                'ttl': data['ttl'],
+                'absoluteName': fqdn,
+                'type': rr_type,
+                'rdata': data['value'],
+            }
+            temp_ent = {
+                'name': '',
+                'type': 'GenericRecord',
+                'properties': dict2props(d),
+            }
+            if pybam.Debug:
+                print('Entity template to be added:', temp_ent)
+            new_obj_id = pybam.add_entity(pid, temp_ent)
+            if pybam.Debug:
+                print('New ObjectID', new_obj_id)
+
+#
+# delete a given generic RR
+#
+
+def delete_rr(data):
+    if pybam.Debug:
+        print()
+        print('input data:', data)
+    fqdn = data['fqdn']
+    rr_type = data['rr_type']
+    value = data['value']
+    obj_type = pybam.RRTypeMap[rr_type]['obj_type']
+    prop_key = pybam.RRTypeMap[rr_type]['prop_key']
+    ent = pybam.get_info_by_name(fqdn)
+    if pybam.Debug:
+        print('initial Entity:', ent)
+    if ent['type'] == 'Zone':
+        pid = ent['id']
+        ents = pybam.get_entities(pid, rr_obj_type, 0, 100)
+        for ent in ents:
+            if ent['name'] == '':
+                d = props2dict(ent['properties'])
+                if d['type'] == rr_type and d['rdata'] == value:
+                    if pybam.Debug:
+                        print('deleting:', ent)
+                    pybam.delete(ent['id'])
+
+
+#
+# Perform an update to a current RR
+#
+
 
 def update_rr(data):
-    pprint(data)
+    if pybam.Debug:
+        print()
+        print('record', data)
     fqdn = data['fqdn']
+    rr_type = data['rr_type']
+    rr_obj_type = pybam.RRTypeMap[rr_type]
     ent = pybam.get_info_by_name(fqdn)
-    pprint(ent)
+    if pybam.Debug:
+        print('BAM root entity',ent)
     pid = ent['pid']
     if ent['type'] == 'Zone':
-        key = fqdn.split('.')[0]
-        vars = pybam.search_by_category(key, 'RESOURCE_RECORD', 0, 5)
-        pprint(vars)
-#        vals = pybam.search_by_object_types(key, 'GenericRecord', 0, 5)
-#        pprint(vals)
-    data = pybam.get_entity_by_id(2443015)
-    pprint(data)
+        pid = ent['id']
+    ents = pybam.get_entities(pid, rr_obj_type, 0, 100)
+    for ent in ents:
+        if pybam.Debug:
+            print('Ent:','ObjType', rr_obj_type,  ent)
+        d = props2dict(ent['properties'])
+        if d['absoluteName'] == fqdn:
+            if pybam.Debug:
+                print('Entity bef:','ObjType', rr_obj_type,  ent)
+            if ent['type'] == 'TXTRecord': 
+                d['txt'] = data['value']
+            if ent['type'] == 'GenericRecord': 
+                if d['type'] == rr_type:
+                    d['rdata'] = data['value']
+            d['ttl'] = data['ttl']
+            ent['properties'] = dict2props(d)
+            if pybam.Debug:
+                print('Entity aft:','ObjType', rr_obj_type,  ent)
+                print()
+            pybam.update_object(ent)
 
 
 def test_get_entity_by_name():

@@ -77,8 +77,8 @@ RootId = 0
 ConfigId = 0
 ViewId = 0
 
-ConfigName = 'Test'
 ConfigName = 'Production'
+ConfigName = 'Test'
 ViewName = 'Public'
 
 AuthHeader = {}
@@ -99,6 +99,13 @@ ObjectTypes = [
         'NAPTRRecord',
         'StartOfAuthority'
 ]
+
+RRObjectTypes = ObjectTypes[3:]
+
+RRTypeMap = {
+        'TXT': {'obj_type': 'TXTRecord', 'prop_key': 'txt'},
+        'A': {'obj_type': 'GenericRecord', 'prop_key': 'rdata'},
+}
 
 IPv4Objects = [
         'IP4Block',
@@ -731,10 +738,6 @@ def delete(obj_id):
     URL = BaseURL + 'delete'
     param = {'objectId': obj_id}
     req = requests.delete(URL, headers=AuthHeader, params=param)
-    if Debug:
-        print('delete request info:')
-        print('request URL: ', req.url)
-        print('server response ', req.text)
     
 '''
 
@@ -964,15 +967,15 @@ a single zone name without any . (dot) characters.
 The parent object must be either a DNS view or another DNS zone.
 
 Output / Response
-Returns the object ID for the new DNS zone.
+    Returns the object ID for the new Entity.
 
 API call: long addEntity( long parentId, APIEntity entity )
 
 Parameter Description
-parentId: The object ID of the parent DNS view or
-          DNS zone to which the zone is added.
+    parentId: The object ID of the parent DNS view or
+              DNS zone to which the zone is added.
           
-entity:   The zone name, without any . (dot) characters, to be added.
+entity:  The zone name, without any . (dot) characters, to be added.
 
 The entity has the following JSON structure:
 
@@ -1325,6 +1328,121 @@ def get_host_records_by_hint(options, start=0, count=10):
     req = requests.get(URL, headers=AuthHeader, params=params)
     return req.json()
 
+# Editing specific types of Resource Records
+
+'''
+
+Add Text Records
+
+    This method will add the record under a zone.
+
+Output / Response:
+    Returns the object ID for the new TXT record.
+
+API call:
+long addTXTRecord ( long viewId, String absoluteName, String txt, long ttl, String properties )
+Parameter Description
+viewId:
+    The object ID for the parent view to which the record is being added.
+absoluteName:
+    The FQDN of the text record. If you are adding a record in a zone
+    that is linked to a incremental Naming Policy, a single hash (#)
+    sign must be added at the appropriate location in the FQDN. Depending
+    on the policy order value, the location of the single hash (#) sign
+    varies.
+
+txt:
+    The text data for the record.
+ttl:
+    The time-to-live value for the record. To ignore the ttl, set this value to -1.
+properties:
+    Adds object properties, including comments and user-defined fields.
+
+'''
+
+def add_TXT_Record(viewid, absname, txt, ttl, props):
+    URL = BaseURL + 'addTXTRecord'
+    params = {
+        'viewId': viewid,
+        'absoluteName': absname,
+        'txt': txt,
+        'ttl': ttl,
+        'properties': props
+    }
+    req = requests.post(URL, headers=AuthHeader, params=params)
+    return req.json()
+
+'''
+
+Generic Records
+
+Use the generic resource record methods to add and update the
+following resource record types:
+    A6, AAAA, AFSDB, APL, CAA, CERT, DNAME, DNSKEY, DS, ISDN, KEY,
+    KX, LOC, MB, MG, MINFO, MR, NS, NSAP, PX, RP, RT, SINK, SSHFP,
+    TLSA, WKS, and X25.
+The fields available are:
+    name, type (which defines the custom record type), and data
+    (the rdata value for the custom type). The time-to-live for this
+    record can be set to an override value, so the record has a longer
+    or shorter ttl. A comment field is also included.
+
+Output / Response
+    Returns the object ID for the new generic resource record
+
+'''
+
+def add_Generic_Record(viewid, absname, rr_type, rr_data, ttl, props):
+    URL = BaseURL + 'addGenericRecord'
+    params = {
+        'viewId': viewid,
+        'absoluteName': absname,
+        'type': rr_type,
+        'rdata': rr_data,
+        'ttl': ttl,
+        'properties': props
+    }
+    req = requests.post(URL, headers=AuthHeader, params=params)
+    return req.json()
+
+def add_MX_Record(viewid, absname, priority, mx_host, ttl, props):
+    URL = BaseURL + 'addMXRecord'
+    params = {
+        'viewId': viewid,
+        'absoluteName': absname,
+        'priority': priority,
+        'linkedRecordName': mx_host,
+        'ttl': ttl,
+        'properties': props
+    }
+    obj_id = add_ExternalHost_Record(viewid, mx_host, props)  
+    req = requests.post(URL, headers=AuthHeader, params=params)
+    return req.json()
+
+def add_ExternalHost_Record(viewid, mx_host, props):
+    URL = BaseURL + 'addExternalHostRecord'
+    params = {
+        'viewId': viewid,
+        'name': mx_host,
+        'properties': props
+    }
+    req = requests.post(URL, headers=AuthHeader, params=params)
+    return req.json()
+
+
+def add_Alias_Record(viewid, absname, link, ttl, props):
+    URL = BaseURL + 'addAliasRecord'
+    params = {
+        'viewId': viewid,
+        'absoluteName': absname,
+        'linkedRecordName': link,
+        'ttl': ttl,
+        'properties': props
+    }
+    val = add_ExternalHost_Record(viewid, link, props)
+    req = requests.post(URL, headers=AuthHeader, params=params)
+    return req.json()
+
 
 def get_system_info():
     URL = BaseURL + 'getSystemInfo'
@@ -1350,7 +1468,7 @@ def get_token():
     URL = BaseURL + 'login'
 
     if Debug:
-        Creds = creds_ro
+        Creds = creds_rw
     else:
         uname = input('Username: ')
         pw = getpass.getpass()
@@ -1402,7 +1520,6 @@ def delete_zone(fqdn):
     if zone_id:
         val = delete(zone_id)
         return val
-
 
 
 #
@@ -1516,9 +1633,11 @@ def get_zone_id(fqdn):
 #
 
 def is_zone(fqdn):
-
-    vals = search_by_object_types(fqdn, 'Zone', 0, 3)
-    return vals
+    ent = get_info_by_name(fqdn)
+    if ent['type'] == 'Zone':
+        return ent['id']
+    else:
+        return False
 
 #
 # Add a zone using the generic add_generic call rather than
