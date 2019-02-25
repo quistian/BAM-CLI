@@ -1172,6 +1172,7 @@ def add_resource_record(fqdn, typ, rrdata, ttl, props):
         'ttl': str(ttl),
         'properties': props
     }
+    print(params)
     req = requests.post(URL, headers=AuthHeader, params=params)
     return req.json()
 
@@ -1555,7 +1556,6 @@ def parent_name(fqdn):
 # Get the information of an Entity (Id and parentId) given a FQDN or a CIDR block
 #
 
-  
 def get_info_by_name(fqdn):
     id = ViewId
     names = fqdn.split('.')
