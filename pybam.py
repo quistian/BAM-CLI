@@ -79,6 +79,7 @@ ViewId = 0
 
 ConfigName = 'Production'
 ConfigName = 'Test'
+
 ViewName = 'Public'
 
 AuthHeader = {}
@@ -97,14 +98,19 @@ ObjectTypes = [
         'GenericRecord',
         'HINFORecord',
         'NAPTRRecord',
-        'StartOfAuthority'
+        'StartOfAuthority',
+        'ExternalHostRecord'
 ]
 
 RRObjectTypes = ObjectTypes[3:]
 
 RRTypeMap = {
-        'TXT': {'obj_type': 'TXTRecord', 'prop_key': 'txt'},
+        'MX': {'obj_type': 'MXRecord', 'prop_key': 'linkedRecordName'},
+        'HOST': {'obj_type': 'HostRecord', 'prop_key': 'addresses'},
         'A': {'obj_type': 'GenericRecord', 'prop_key': 'rdata'},
+        'PTR': {'obj_type': 'GenericRecord', 'prop_key': 'rdata'},
+        'CNAME': {'obj_type': 'AliasRecord', 'prop_key': 'linkedRecordName'},
+        'TXT': {'obj_type': 'TXTRecord', 'prop_key': 'txt'},
 }
 
 IPv4Objects = [
@@ -225,7 +231,7 @@ Get Entities
 
 Returns an array of requested child objects for a given parentId value.
 Some objects returned in the array may not have their properties field set.
-`For those objects, you will need to call them individually using
+For those objects, you will need to call them individually using
 the getEntityById() method to populate the properties field.
 
 * Using getEntities() to search users will return all users existing in Address Manager.
@@ -776,6 +782,7 @@ Generic methods for getting, link or unlink entities.
 '''
 
 Get Linked Entities
+
 Returns an array of entities containing the entities linked to a specified entity.
 The array is empty if there are no linked entities.
 
@@ -808,12 +815,12 @@ Parameter Description
 
 '''
 
-def get_linked_entities(entityid, type, start=0, count=10):
+def get_linked_entities(entityid, obj_type, start=0, count=10):
     URL = BaseURL + 'getLinkedEntities'
 
     params = {
             'entityId': entityid,
-            'type': type,
+            'type': obj_type,
             'start': start,
             'count': count,
     }
@@ -1237,13 +1244,7 @@ def add_host_record(fqdn, ips, ttl, properties):
       'properties': properties
     }
 
-    if Debug:
-        pprint(params)
-
     req = requests.post(URL, headers=AuthHeader, params=params)
-    if Debug:
-        print(req.url)
-        print(req.text)
     return req.json()
 
 
@@ -1416,15 +1417,15 @@ def add_MX_Record(viewid, absname, priority, mx_host, ttl, props):
         'ttl': ttl,
         'properties': props
     }
-    obj_id = add_ExternalHost_Record(viewid, mx_host, props)  
     req = requests.post(URL, headers=AuthHeader, params=params)
     return req.json()
 
-def add_ExternalHost_Record(viewid, mx_host, props):
+
+def add_ExternalHost_Record(viewid, ex_host, props):
     URL = BaseURL + 'addExternalHostRecord'
     params = {
         'viewId': viewid,
-        'name': mx_host,
+        'name': ex_host,
         'properties': props
     }
     req = requests.post(URL, headers=AuthHeader, params=params)
@@ -1440,7 +1441,6 @@ def add_Alias_Record(viewid, absname, link, ttl, props):
         'ttl': ttl,
         'properties': props
     }
-    val = add_ExternalHost_Record(viewid, link, props)
     req = requests.post(URL, headers=AuthHeader, params=params)
     return req.json()
 

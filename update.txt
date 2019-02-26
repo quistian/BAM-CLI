@@ -1,0 +1,77 @@
+#delete, yes.uoft.ca., 86400, MX, 3 mx2.quist.ca
+add, howie.yes.uoft.ca., 64000, HOST, 128.100.102.7
+#add, toronto.yes.uoft.ca., 600, PTR, 10.3.2.3
+#add, yes.uoft.ca., 600, PTR, 10.10.2.3
+#update, yes.uoft.ca., 86400, TXT, New Text Info:Brand New Info
+#update, yes.uoft.ca., 86400, TXT, www.quist.ca is mine:New Text Info
+#update, fox.yes.uoft.ca., 86400, CNAME, www.quist.ca:www2.quist.ca
+#delete, yes.uoft.ca., 9600, TXT, I am substancial!
+#delete, bozo.yes.uoft.ca., 9600, A, 2.2.2.1
+#delete, mx.yes.uoft.ca., 9600, MX, 10 mx.quist.ca
+#add, fox.yes.uoft.ca, 8640, CNAME, www.quist.ca
+#add, quist.yes.uoft.ca, 8640, CNAME, frodo.quist.ca
+#delete, rps.yes.uoft.ca., 7600, TXT, Russell Sutherland
+#delete, hello.yes.uoft.ca., 7600, TXT, Hello World
+#delete, rps.yes.uoft.ca., 3667, A, 5.5.5.5
+delete, yes.uoft.cc., 1666, A, 1.2.3.4
+delete, yes.uoft.cc., 2666, A, 2.2.3.4
+delete, yes.uoft.cc., 3666, A, 3.2.3.4
+delete, bozo.yes.uoft.cc., 86460, A, 2.2.2.1
+update, acjobs.utoronto.ca., 3600, A, 142.150.254.32
+update, actionattentionlab.utoronto.ca., 3600, A, 142.150.254.32
+update, activecollab.fpeh.utoronto.ca., 3600, A, 142.150.254.32
+update, activityguide.utoronto.ca., 3600, A, 142.150.254.32
+update, athletewelfare.utoronto.ca., 3600, A, 142.150.254.32
+update, backcampusfields.utoronto.ca., 3600, A, 142.150.254.32
+update, beat.utoronto.ca., 3600, A, 142.150.254.32
+update, biomechanics.utoronto.ca., 3600, A, 142.150.254.32
+update, concussion.utoronto.ca., 3600, A, 142.150.254.32
+update, csps.utoronto.ca., 3600, A, 142.150.254.32
+update, dropinrecreation.utoronto.ca., 3600, A, 142.150.254.32
+update, epu.utoronto.ca., 3600, A, 142.150.254.32
+update, Exs.utoronto.ca., 3600, A, 142.150.254.32
+update, hbe.utoronto.ca., 3600, A, 142.150.254.32
+update, Healthandperformance.utoronto.ca., 3600, A, 142.150.254.32
+update, Humanphysiology.utoronto.ca., 3600, A, 142.150.254.32
+update, kin.utoronto.ca., 3600, A, 142.150.254.32
+update, kinesiology.utoronto.ca., 3600, A, 142.150.254.32
+update, kinesiology-phe.utoronto.ca., 3600, A, 142.150.254.32
+update, Kpeplacements.utoronto.ca., 3600, A, 142.150.254.32
+update, Musclehealth.utoronto.ca., 3600, A, 142.150.254.32
+update, Phe.utoronto.ca., 3600, A, 142.150.254.32
+update, physical.utoronto.ca., 3600, A, 142.150.254.32
+update, Pmb.utoronto.ca., 3600, A, 142.150.254.32
+update, Pursuit.utoronto.ca., 3600, A, 142.150.254.32
+update, recreg.utoronto.ca., 3600, A, 142.150.254.32
+update, Sportlegacies.utoronto.ca., 3600, A, 142.150.254.32
+update, Sportpolicy.utoronto.ca., 3600, A, 142.150.254.32
+update, athletics.utoronto.ca., 3600, A, 142.150.254.32
+update, www.acjobs.utoronto.ca., 3600, A, 142.150.254.32
+update, www.actionattentionlab.utoronto.ca., 3600, A, 142.150.254.32
+update, www.activecollab.fpeh.utoronto.ca., 3600, A, 142.150.254.32
+update, www.activityguide.utoronto.ca., 3600, A, 142.150.254.32
+update, www.athletewelfare.utoronto.ca., 3600, A, 142.150.254.32
+update, www.backcampusfields.utoronto.ca., 3600, A, 142.150.254.32
+update, www.beat.utoronto.ca., 3600, A, 142.150.254.32
+update, www.biomechanics.utoronto.ca., 3600, A, 142.150.254.32
+update, www.concussion.utoronto.ca., 3600, A, 142.150.254.32
+update, www.csps.utoronto.ca., 3600, A, 142.150.254.32
+update, www.dropinrecreation.utoronto.ca., 3600, A, 142.150.254.32
+update, www.epu.utoronto.ca., 3600, A, 142.150.254.32
+update, www.Exs.utoronto.ca., 3600, A, 142.150.254.32
+update, www.hbe.utoronto.ca., 3600, A, 142.150.254.32
+update, www.Healthandperformance.utoronto.ca., 3600, A, 142.150.254.32
+update, www.Humanphysiology.utoronto.ca., 3600, A, 142.150.254.32
+update, www.kin.utoronto.ca., 3600, A, 142.150.254.32
+update, www.kinesiology.utoronto.ca., 3600, A, 142.150.254.32
+update, www.kinesiology-phe.utoronto.ca., 3600, A, 142.150.254.32
+update, www.Kpeplacements.utoronto.ca., 3600, A, 142.150.254.32
+update, www.Musclehealth.utoronto.ca., 3600, A, 142.150.254.32
+update, www.Phe.utoronto.ca., 3600, A, 142.150.254.32
+update, www.physical.utoronto.ca., 3600, A, 142.150.254.32
+update, www.Pmb.utoronto.ca., 3600, A, 142.150.254.32
+update, www.Pursuit.utoronto.ca., 3600, A, 142.150.254.32
+update, www.recreg.utoronto.ca., 3600, A, 142.150.254.32
+update, www.Sportlegacies.utoronto.ca., 3600, A, 142.150.254.32
+update, www.Sportpolicy.utoronto.ca., 3600, A, 142.150.254.32
+update, www.athletics.utoronto.ca., 3600, A, 142.150.254.32
