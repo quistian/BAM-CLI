@@ -41,6 +41,7 @@ User Group Webinar - Making APIs Work for You - Episode 1
 
 '''
 
+import os
 import sys
 import json
 import requests
@@ -914,6 +915,106 @@ Parameter Description:
 
 '''
 
+'''
+
+Assign IPv4 Address
+    Assigns a MAC address and other properties to an IPv4 address.
+
+Output / Response
+    Returns the object ID for the newly assigned IPv4 address.
+
+API call:
+    long assignIP4Address (
+        long configurationId, 
+        String ip4Address, 
+        String macAddress,
+        String hostInfo,
+        String action,
+        String properties
+    )
+
+Parameter: Description
+
+configurationId:
+    The object ID of the configuration in which the IPv4 address is located.
+
+ipv4Address:
+    The IPv4 address.
+
+macAddress:
+    The MAC address to assign to the IPv4 address. The MAC address
+    can be specified in the format:
+        nnnnnnnnnnnn, nn-nn-nn-nn-nn-nn or nn:nn:nn:nn:nn:nn,
+        where nn is a hexadecimal value.
+
+hostInfo:
+    A string containing host information for the address in the following format:
+        hostname,viewId,reverseFlag,sameAsZoneFlag,
+        hostname,viewId,reverseFlag,sameAsZoneFlag,
+        hostname,viewId,reverseFlag,sameAsZoneFlag
+    Where:
+        hostname - FQDN for host record to be added
+        viewId - object ID of the view under which this host should be created
+        reverseFlag - flag indicating if a reverse should be created (true|false)
+        sameAsZoneFlag - The flag indicating if record should be created as same
+            as zone record. The possible values are true and false
+    The comma-separated parameters may be repeated in the order shown above.
+    The string must not end with a comma.
+
+action:
+    This parameter must be set to the constants in IP Assignment Action Values:
+        MAKE_STATIC, MAKE_RESERVED or MAKE_DHCP_RESERVED
+
+properties:
+    A string containing the following property, including user-defined fields:
+
+        ptrs:
+            a string containing the list of unmanaged external host records to
+            be associated with the IPv4 address in the following format:
+                viewId,exHostFQDN[, viewId,exHostFQDN,...]
+
+            EntityProperties props = new EntityProperties();
+            props.addProperty(
+                ObjectProperties.ptrs,
+                123,exHostFQDN.com,456,exHostFQDN.net"
+            )
+            long addressId =
+                service.assignIP4Address(
+                    configurationId,
+             IPv4Address, macAddressStr, hostInfo,
+         IPAssignmentActionValues.MAKE_STATIC, props.getPropertiesString() );
+
+ name -- name of the IPv4 address.
+
+    locationCode - the hierarchical location code consists of a set of 1 to 3
+    alpha-numeric strings separated by a space. The first two characters
+    indicate a country, followed by next three characters which indicate
+    a city in UN/ LOCODE. New custom locations created under a UN/LOCODE
+    city are appended to the end of the hierarchy. For example, CA TOR
+    OF1 indicates: CA= Canada TOR=Toronto OF1=Office 1.
+
+    The code is case-sensitive. It must be all UPPER CASE letters.
+    The country code and child location code should be alphanumeric strings.
+
+
+'''
+
+def assign_IP4_Address(configid, ipaddr, macaddr, hostinfo, action, props):
+    URL = BaseURL + 'assignIP4Address'
+
+    params = {
+        'configurationId': configid,
+        'ip4Address': ipaddr,
+        'macAdress': macaddr,
+        'hostInfo': hostinfo,
+        'action': action,
+        'properties': props
+    }
+
+    req = requests.post(URL, headers=AuthHeader, params=params)
+    return req.json()
+
+
 def add_IP4_block_by_CIDR(parentid, cidr, properties):
     URL = BaseURL + 'addIP4BlockByCIDR'
     
@@ -1169,7 +1270,7 @@ rdata: Data for the RR in the BIND format
 
 '''
 
-def add_resource_record(fqdn, typ, rrdata, ttl, props):
+def add_resource_record(fqdn, typ, rrdata, ttl=86400, props='comments=EmTee|'):
     URL = BaseURL + 'addResourceRecord'
     params = {
         'viewId': ViewId,
@@ -1179,7 +1280,8 @@ def add_resource_record(fqdn, typ, rrdata, ttl, props):
         'ttl': str(ttl),
         'properties': props
     }
-    print(params)
+    if Debug:
+        print(params)
     req = requests.post(URL, headers=AuthHeader, params=params)
     return req.json()
 
@@ -1448,8 +1550,11 @@ def add_Alias_Record(viewid, absname, link, ttl, props):
 def get_system_info():
     URL = BaseURL + 'getSystemInfo'
     req = requests.get(URL, headers=AuthHeader)
-    return req.json()
-
+    code = req.status_code
+    if req.status_code == 200:
+        return req.json()
+    else:
+        bam_error(req.text)
 
 def get_configuration_setting(id, name):
     URL = BaseURL + 'getConfigurationSetting'
@@ -1474,11 +1579,9 @@ def get_token():
         uname = input('Username: ')
         pw = getpass.getpass()
         Creds = {'username': uname, 'password': pw}
-    pprint(Creds)
 
     req = requests.get(URL, params=Creds)
-    result = req.json().split()
-    return result[3]
+    return req.json().split()[3]
 
 
 def bam_init():
@@ -1489,16 +1592,20 @@ def bam_init():
       'Authorization': 'BAMAuthToken: ' + tok,
       'Content-Type': 'application/json'
     }
+    if Debug:
+        print('Authorization Header:', AuthHeader)
+        print()
+
+    val = get_system_info()
+    if Debug:
+        vals = val.split('|')
+        for val in vals:
+            print(val)
+        print()
 
     ConfigId = get_config_id(ConfigName)
     ViewId = get_view_id(ViewName)
 
-    if Debug:
-        print()
-        print('Authorization Header:', AuthHeader)
-        print('ConfigId for Configuration:', ConfigName, 'is:',  ConfigId)
-        print('ViewId for View:', ViewName, 'is:', ViewId)
-        print()
 
 def bam_logout():
     URL = BaseURL + 'logout'
@@ -1507,7 +1614,7 @@ def bam_logout():
 
 
 def bam_error(err_str):
-    print(err_str)
+    print('BAM error:', err_str)
     sys.exit()
 
 def get_ip4_address(ip, tok):
@@ -1658,4 +1765,13 @@ def add_zone_generic(fqdn):
         'properties': props
     }
     val = add_entity(par_id, ent)
+    return val
+
+
+def add_PTR_rr(fqdn, ipaddr, ttl=86400):
+    macaddr = ''
+    hostinfo = ''
+    action = 'MAKE_STATIC'
+    props = 'ptrs=' + str(ViewId) + ',' + fqdn
+    val = assign_IP4_Address(ConfigId, ipaddr, macaddr, hostinfo, action, props)
     return val

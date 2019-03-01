@@ -54,7 +54,7 @@ def process_bulk_data(fname):
                 if action == 'update':
                     update_rr(row)
                 if action == 'add':
-                    if pybam.is_zone(fqdn):
+                    if pybam.Debug and pybam.is_zone(fqdn):
                         print('Adding RR at the zone level:', fqdn)
                     add_entity_rr(row)
                 if action == 'delete':
@@ -222,11 +222,16 @@ def add_entity_rr(data):
         'properties': dict2props(d),
     }
 
-    if pybam.Debug:
-        print('ParentID', obj_pid, 'Temp Ent', temp_ent)
-    new_obj_id = pybam.add_entity(obj_pid, temp_ent)
-    if pybam.Debug:
-        print('New ObjectID', new_obj_id)
+    if rr_type == 'PTR':
+        obj_id = pybam.add_PTR_rr(fqdn, value)
+        if pybam.Debug:
+            print(obj_id, pybam.get_entity_by_id(obj_id))
+    else:
+        if pybam.Debug:
+            print('ParentID', obj_pid, 'Temp Ent', temp_ent)
+        new_obj_id = pybam.add_entity(obj_pid, temp_ent)
+        if pybam.Debug:
+            print('New ObjectID', new_obj_id)
 
 #
 # delete a given generic RR
@@ -533,13 +538,14 @@ def main():
 
     pybam.bam_init()
 
-    sysinfo = pybam.get_system_info()
-    print('System Information:')
-    for item in sysinfo.split('|'):
-        print(item)
+#    sysinfo = pybam.get_system_info()
+#    print('System Information:')
+#    for item in sysinfo.split('|'):
+#        print(item)
 
-    ent = pybam.get_entity_by_id(2519930)
-    print(ent)
+    for i in [2519962, 2519963]:
+        ent = pybam.get_entity_by_id(i)
+        print(i, ent)
 
     process_bulk_data('update.txt')
 

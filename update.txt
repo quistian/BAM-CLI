@@ -1,7 +1,7 @@
 #delete, yes.uoft.ca., 86400, MX, 3 mx2.quist.ca
-add, howie.yes.uoft.ca., 64000, HOST, 128.100.102.7
+#add, kathy.yes.uoft.ca., 64000, HOST, 128.100.102.77
 #add, toronto.yes.uoft.ca., 600, PTR, 10.3.2.3
-#add, yes.uoft.ca., 600, PTR, 10.10.2.3
+add, pony.yes.uoft.ca., 86400, PTR, 128.100.102.17
 #update, yes.uoft.ca., 86400, TXT, New Text Info:Brand New Info
 #update, yes.uoft.ca., 86400, TXT, www.quist.ca is mine:New Text Info
 #update, fox.yes.uoft.ca., 86400, CNAME, www.quist.ca:www2.quist.ca
