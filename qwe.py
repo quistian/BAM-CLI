@@ -56,7 +56,7 @@ def process_bulk_data(fname):
                 if action == 'add':
                     if pybam.Debug and pybam.is_zone(fqdn):
                         print('Adding RR at the zone level:', fqdn)
-                    add_entity_rr(row)
+                    pybam.add_entity_rr(row)
                 if action == 'delete':
                     delete_rr(row)
                 if action == 'get':
@@ -105,7 +105,7 @@ def object_find(fqdn, rr_type, value):
             if len(ents):
                 for ent in ents:
                     if 'properties' in ent and ent['properties'] is not None:
-                        d = props2dict(ent['properties'])
+                        d = pybam.props2dict(ent['properties'])
                         if d['absoluteName'] == fqdn and value == d[prop_key]:
                             id = ent['id']
         pname = name
@@ -123,19 +123,6 @@ TXTRecord
     'properties': 'comments=Zone Information|ttl=7600|absoluteName=yes.uoft.ca|txt=STOP GO|'}
 
 '''
-
-def get_external_hosts():
-    exhosts = []
-    ents = pybam.get_entities(pybam.ViewId, 'ExternalHostRecord', 0, 250)
-    for ent in ents:
-        exhosts.append(ent['name'])
-    return exhosts
-
-def add_external_host(exhost):
-    exhosts = get_external_hosts()
-    if exhost not in exhosts:
-        val = pybam.add_ExternalHost_Record(pybam.ViewId, exhost, 'comments=Ext. Host|')
-        print(val)
 
 #
 # now done by add/update/delete entity
@@ -158,80 +145,6 @@ def add_RR_rr(data):
     val = pybam.add_resource_record(fqdn, obj_type, rdata, ttl, props)
     print(val)
 
-#
-# fqdn is at the zone level or is a new RR below a zone
-#
-
-def add_entity_rr(data):
-    if pybam.Debug:
-        print()
-        print('input data:', data)
-
-    fqdn = data['fqdn']
-    rr_type = data['rr_type']
-    ttl = data['ttl']
-    value = data['value']
-
-    ent_obj_type = pybam.RRTypeMap[rr_type]['obj_type']
-    ent_key = pybam.RRTypeMap[rr_type]['prop_key']
-
-    d = {
-        'absoluteName': fqdn,
-        'ttl': ttl,
-        'comments': 'Nothing yet',
-    }
-
-    ent = pybam.get_info_by_name(fqdn)
-    if pybam.Debug:
-        print('initial get_info entity:', ent)
-    obj_id = ent['id']
-    obj_pid = ent['pid']
-    obj_type = ent['type']
-    obj_name = fqdn.split('.')[0]
-
-    if rr_type == 'HOST':
-        d['reverseRecord'] = 'true'
-    elif rr_type == 'MX':
-        (priority, value) = value.split(' ')
-        add_external_host(value)
-        d['priority'] = priority
-    elif rr_type == 'CNAME':
-        if obj_type == 'Zone':
-            zone_ent = pybam.get_entity_by_id(ent['id'])
-            print('CNAME records are not allowed at the top of Zone')
-            print('Existing Zone info:', zone_ent)
-            return
-        if obj_id:
-            cname_ent = pybam.get_entity_by_id(ent['id'])
-            print('Multiple CNAME records are forbidden')
-            print('Existing CNAME record:', cname_ent)
-            return
-
-    if obj_type == 'Zone':
-        obj_pid = ent['id']
-        obj_name = ''
-
-    if ent_obj_type == 'GenericRecord':
-        d['type'] = rr_type
-
-    d[ent_key] = value
-
-    temp_ent = {
-        'name': obj_name,
-        'type': ent_obj_type,
-        'properties': dict2props(d),
-    }
-
-    if rr_type == 'PTR':
-        obj_id = pybam.add_PTR_rr(fqdn, value)
-        if pybam.Debug:
-            print(obj_id, pybam.get_entity_by_id(obj_id))
-    else:
-        if pybam.Debug:
-            print('ParentID', obj_pid, 'Temp Ent', temp_ent)
-        new_obj_id = pybam.add_entity(obj_pid, temp_ent)
-        if pybam.Debug:
-            print('New ObjectID', new_obj_id)
 
 #
 # delete a given generic RR
@@ -262,7 +175,7 @@ def delete_rr_old(data):
         ents = pybam.get_entities(pid, rr_obj_type, 0, 100)
         for ent in ents:
             if ent['name'] == '':
-                d = props2dict(ent['properties'])
+                d = pybam.props2dict(ent['properties'])
                 if d['type'] == rr_type and d['rdata'] == value:
                     if pybam.Debug:
                         print('deleting:', ent)
@@ -286,20 +199,20 @@ def update_rr(data):
         prop_key = pybam.RRTypeMap[rr_type]['prop_key']
         if rr_type ==  'MX':
             (priority, value) = value_new.split(' ')
-            add_external_host(value)
+            pybam.add_external_host(value)
         else:
             value = value_new
         if rr_type == 'CNAME':
-            add_external_host(value)
+            pybam.add_external_host(value)
         ent = pybam.get_entity_by_id(obj_id)
         if pybam.Debug:
             print('ent bef', ent)
-        d = props2dict(ent['properties'])
+        d = pybam.props2dict(ent['properties'])
         d[prop_key] = value
         d['ttl'] = ttl
         if rr_type  == 'MX':
             d['priority'] = priority
-        ent['properties'] = dict2props(d)
+        ent['properties'] = pybam.dict2props(d)
         if pybam.Debug:
             print('ent aft:', ent)
         val = pybam.update_object(ent)
@@ -367,30 +280,6 @@ def test_custom_search():
     vars = pybam.custom_search(filters, 'GenericRecord', 0, 15)
     pprint(vars)
 
-
-# Takes a property list as a string e.g. 
-#   ttl=86400|absoluteName=fwsm-tabu.bkup.utoronto.ca|addresses=128.100.96.158|reverseRecord=true|
-# and returns it as a dictionary equivalent:
-#   {'ttl': '86400', 'absoluteName': 'fwsm-tabu.bkup.utoronto.ca', 'addresses': '128.100.96.158', 'reverseRecord': 'true'}
-
-def props2dict(str):
-    dd = {}
-    ll = str.split('|')
-    for i in ll[0:-1]:
-        kv = i.split('=')
-        dd[kv[0]] = kv[1]
-    return dd
-
-# Takes a property list as a dictionary e.g. 
-# {'ttl': '86400', 'absoluteName': 'fwsm-tabu.bkup.utoronto.ca', 'addresses': '128.100.96.158', 'reverseRecord': 'true'}
-# and returns it as a string equivalent:
-#   ttl=86400|absoluteName=fwsm-tabu.bkup.utoronto.ca|addresses=128.100.96.158|reverseRecord=true|
-
-def dict2props(d):
-    props = []
-    for k,v in d.items():
-        props.append('='.join([k,v]))
-    return '|'.join(props) + '|'
 
 def test_rr_functions():
 
@@ -494,10 +383,10 @@ def test_update():
     id = 2460953
     ent = pybam.get_entity_by_id(id)
     props = ent['properties']
-    d = props2dict(props)
+    d = pybam.props2dict(props)
     ttl = int(d['ttl']) - 3600
     d['ttl'] = str(ttl) 
-    props2 = dict2props(d)
+    props2 = pybam.dict2props(d)
     ent['properties'] = props2
     pybam.update_object(ent)
     print('View ID:', ViewId)
@@ -543,15 +432,15 @@ def main():
 #    for item in sysinfo.split('|'):
 #        print(item)
 
-    for i in [2519962, 2519963]:
-        ent = pybam.get_entity_by_id(i)
-        print(i, ent)
-
     process_bulk_data('update.txt')
 
 #   test_search_functions()
 
     pybam.bam_logout()
+
+    for i in [2520076, 2520077, 2519963]:
+        ent = pybam.get_entity_by_id(i)
+        print(i, ent)
     
     ents = pybam.get_host_records_by_hint('hint=^ra|retrieveFields=true', start=0, count=1)
     pprint(ents)

@@ -107,8 +107,8 @@ RRObjectTypes = ObjectTypes[3:]
 
 RRTypeMap = {
         'MX': {'obj_type': 'MXRecord', 'prop_key': 'linkedRecordName'},
-        'HOST': {'obj_type': 'HostRecord', 'prop_key': 'addresses'},
-        'A': {'obj_type': 'GenericRecord', 'prop_key': 'rdata'},
+        'A': {'obj_type': 'HostRecord', 'prop_key': 'addresses'},
+        'a': {'obj_type': 'GenericRecord', 'prop_key': 'rdata'},
         'PTR': {'obj_type': 'GenericRecord', 'prop_key': 'rdata'},
         'CNAME': {'obj_type': 'AliasRecord', 'prop_key': 'linkedRecordName'},
         'TXT': {'obj_type': 'TXTRecord', 'prop_key': 'txt'},
@@ -1331,7 +1331,7 @@ Parameters:
 '''
 
 
-def add_host_record(fqdn, ips, ttl, properties):
+def add_host_record(fqdn, ips, ttl=86400, properties='comments=EnTee|'):
     URL = BaseURL + 'addHostRecord'
 
 # adding to the top level of the zone requires a leading dot
@@ -1464,10 +1464,10 @@ properties:
 
 '''
 
-def add_TXT_Record(viewid, absname, txt, ttl, props):
+def add_TXT_Record(absname, txt, ttl=86400, props='comments=EmTee|'):
     URL = BaseURL + 'addTXTRecord'
     params = {
-        'viewId': viewid,
+        'viewId': ViewId,
         'absoluteName': absname,
         'txt': txt,
         'ttl': ttl,
@@ -1509,10 +1509,10 @@ def add_Generic_Record(viewid, absname, rr_type, rr_data, ttl, props):
     req = requests.post(URL, headers=AuthHeader, params=params)
     return req.json()
 
-def add_MX_Record(viewid, absname, priority, mx_host, ttl, props):
+def add_MX_Record(absname, priority, mx_host, ttl=86400, props='comments=EmTee|'):
     URL = BaseURL + 'addMXRecord'
     params = {
-        'viewId': viewid,
+        'viewId': ViewId,
         'absoluteName': absname,
         'priority': priority,
         'linkedRecordName': mx_host,
@@ -1534,10 +1534,10 @@ def add_ExternalHost_Record(viewid, ex_host, props):
     return req.json()
 
 
-def add_Alias_Record(viewid, absname, link, ttl, props):
+def add_Alias_Record(absname, link, ttl=86400, props='comments=EmTee|'):
     URL = BaseURL + 'addAliasRecord'
     params = {
-        'viewId': viewid,
+        'viewId': ViewId,
         'absoluteName': absname,
         'linkedRecordName': link,
         'ttl': ttl,
@@ -1568,6 +1568,31 @@ def get_configuration_setting(id, name):
 Higher Level Functions
 
 '''
+
+# Takes a property list as a dictionary e.g.
+# {'ttl': '86400', 'absoluteName': 'fwsm-tabu.bkup.utoronto.ca', 'addresses': '128.100.96.158', 'reverseRecord': 'true'}
+# and returns it as a string equivalent:
+#   ttl=86400|absoluteName=fwsm-tabu.bkup.utoronto.ca|addresses=128.100.96.158|reverseRecord=true|
+
+def dict2props(d):
+    props = []
+    for k,v in d.items():
+        props.append('='.join([k,v]))
+    return '|'.join(props) + '|'
+
+
+# Takes a property list as a string e.g.
+#   ttl=86400|absoluteName=fwsm-tabu.bkup.utoronto.ca|addresses=128.100.96.158|reverseRecord=true|
+# and returns it as a dictionary equivalent:
+#   {'ttl': '86400', 'absoluteName': 'fwsm-tabu.bkup.utoronto.ca', 'addresses': '128.100.96.158', 'reverseRecord': 'true'}
+
+def props2dict(str):
+    dd = {}
+    ll = str.split('|')
+    for i in ll[0:-1]:
+        kv = i.split('=')
+        dd[kv[0]] = kv[1]
+    return dd
 
 
 def get_token():
@@ -1775,3 +1800,136 @@ def add_PTR_rr(fqdn, ipaddr, ttl=86400):
     props = 'ptrs=' + str(ViewId) + ',' + fqdn
     val = assign_IP4_Address(ConfigId, ipaddr, macaddr, hostinfo, action, props)
     return val
+
+def get_external_hosts():
+    exhosts = []
+    ents = get_entities(ViewId, 'ExternalHostRecord', 0, 250)
+    for ent in ents:
+        exhosts.append(ent['name'])
+    return exhosts
+
+def add_external_host(exhost):
+    exhosts = get_external_hosts()
+    if exhost not in exhosts:
+        val = add_ExternalHost_Record(ViewId, exhost, 'comments=Ext. Host|')
+        print(val)
+
+#
+# fqdn is at the zone level or is a new RR below a zone
+# add RR by using the lower level add_entity call
+#
+
+def add_entity_rr(data):
+    if Debug:
+        print()
+        print('input data:', data)
+
+    fqdn = data['fqdn']
+    rr_type = data['rr_type']
+    ttl = data['ttl']
+    value = data['value']
+
+#
+# use BAM higher level functions rather than lower level add_entity
+#
+
+    if rr_type == 'A':
+        ent_id = add_host_record(fqdn, value, ttl)
+        if Debug:
+            ent = get_entity_by_id(ent_id)
+            print('add_host_record:', ent)
+        return ent_id
+    elif rr_type == 'TXT':
+        ent_id = add_TXT_Record(fqdn, value, ttl)
+        if Debug:
+            ent = get_entity_by_id(ent_id)
+            print('add_TXT_record:', ent)
+        return ent_id
+    elif rr_type == 'MX':
+        (priority, mx_host) = value.split(' ')
+        add_external_host(mx_host)
+        ent_id = add_MX_Record(fqdn, priority, mx_host, ttl)
+        if Debug:
+            ent = get_entity_by_id(ent_id)
+            print('add_MX_record:', ent)
+        return ent_id
+    elif rr_type == 'CNAME':
+        ent = get_info_by_name(fqdn)
+        ent_id = ent['id']
+        if is_zone(fqdn):
+            print('CNAME records are not allowed at the top of Zone')
+            print('Existing Zone info:', ent)
+            return ent['id']
+        elif ent_id:
+            cname_ent = get_entity_by_id(ent_id)
+            print('Multiple CNAME records are forbidden')
+            print('Existing CNAME record:', cname_ent)
+            return cname_ent['id']
+        else:
+            add_external_host(value)
+            ent_id = add_Alias_Record(fqdn, value, ttl)
+            if Debug:
+                ent = get_entity_by_id(ent_id)
+                print('add_Alias_record:', ent)
+            return ent_id
+
+    ent_obj_type = RRTypeMap[rr_type]['obj_type']
+    ent_key = RRTypeMap[rr_type]['prop_key']
+
+    d = {
+        'absoluteName': fqdn,
+        'ttl': ttl,
+        'comments': 'Nothing yet',
+    }
+
+    ent = get_info_by_name(fqdn)
+    if Debug:
+        print('initial get_info entity:', ent)
+    obj_id = ent['id']
+    obj_pid = ent['pid']
+    obj_type = ent['type']
+    obj_name = fqdn.split('.')[0]
+
+    if rr_type == 'A':
+        d['reverseRecord'] = 'true'
+    elif rr_type == 'MX':
+        (priority, value) = value.split(' ')
+        add_external_host(value)
+        d['priority'] = priority
+    elif rr_type == 'CNAME':
+        if obj_type == 'Zone':
+            zone_ent = get_entity_by_id(ent['id'])
+            print('CNAME records are not allowed at the top of Zone')
+            print('Existing Zone info:', zone_ent)
+            return
+        if obj_id:
+            cname_ent = get_entity_by_id(ent['id'])
+            print('Multiple CNAME records are forbidden')
+            print('Existing CNAME record:', cname_ent)
+            return
+
+    if obj_type == 'Zone':
+        obj_pid = ent['id']
+        obj_name = ''
+
+    if ent_obj_type == 'GenericRecord':
+        d['type'] = rr_type
+
+    d[ent_key] = value
+
+    temp_ent = {
+        'name': obj_name,
+        'type': ent_obj_type,
+        'properties': dict2props(d),
+    }
+
+    if rr_type == 'PTR':
+        obj_id = add_PTR_rr(fqdn, value)
+        if Debug:
+            print(obj_id, get_entity_by_id(obj_id))
+    else:
+        if Debug:
+            print('ParentID', obj_pid, 'Temp Ent', temp_ent)
+        new_obj_id = add_entity(obj_pid, temp_ent)
+        if Debug:
+            print('New ObjectID', new_obj_id)
