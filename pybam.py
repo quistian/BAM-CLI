@@ -223,6 +223,9 @@ def get_entity_by_id(entityid):
     URL = BaseURL + 'getEntityById'
     params = {'id': str(entityid)}
     req = requests.get(URL, headers=AuthHeader, params=params)
+    if Debug > 9:
+        print('Request URL:',req.url)
+        print('Request Status Code:',req.status_code)
     return req.json()
 
 
@@ -651,24 +654,19 @@ def get_MAC_Address(confid, macaddr):
 
 Updating Objects
 
-Generic methods for updating an object.
+    Generic methods for updating an object.
+    Updating an object involves two steps:
+        1. Building the object or parameter string used to update the object.
+        2. Performing the update.
 
-Updating an object involves two steps:
-    1. Building the object or parameter string used to update the object.
-    2. Performing the update.
-
-'''
-
-'''
-Update
-
-Updates entity objects.
+Update: Updates entity objects.
 
 API call: All entity update statements follow this format:
 
-void update ( APIEntity entity )
+    void update ( APIEntity entity )
 
 Parameter Description
+
 entity: The actual API entity passed as an entire object that has its mutable
         values updated
 
@@ -1316,10 +1314,11 @@ Parameters:
     viewId: The object ID for the parent view to which this record is being added.
     
     absoluteName: The FQDN for the host record. If you are adding a record in a zone
-                  that is linked to a incremental Naming Policy,
-                  a single hash (#) sign must be added at the appropriate location
+                  that is linked to a incremental Naming Policy, a single hash (#)
+                  sign must be added at the appropriate location
                   in the FQDN. Depending on the policy order value,
                   the location of the single hash (#) sign varies.
+
     addresses: A list of comma-separated IP addresses
                 (for example, 10.0.0.5,130.4.5.2).
     
@@ -1345,6 +1344,9 @@ def add_host_record(fqdn, ips, ttl=86400, properties='comments=EnTee|'):
       'ttl': ttl,
       'properties': properties
     }
+    if Debug:
+        print('fqdn', fqdn)
+        print('ips', ips)
 
     req = requests.post(URL, headers=AuthHeader, params=params)
     return req.json()
@@ -1533,6 +1535,35 @@ def add_ExternalHost_Record(viewid, ex_host, props):
     req = requests.post(URL, headers=AuthHeader, params=params)
     return req.json()
 
+'''
+
+This method attempts to link to an existing host record. If an existing host record cannot be located, the
+method attempts to link to an existing external host record. If neither can be located, the method fails. This
+method will add the record under a zone`
+
+Output / Response
+    Returns the object ID for the new alias resource record.
+
+API call:
+long addAliasRecord ( long viewId, String absoluteName,
+    String linkedRecordName, long ttl, String properties )
+
+Parameter Description
+    viewId: The object ID for the parent view to which this record is being added.
+
+    absoluteName: The FQDN of the alias.
+        If you are adding a record in a zone that is linked to
+        a incremental Naming Policy, a single hash (#) sign must be added at the
+        appropriate location in the FQDN. Depending on the policy order value, the
+        location of the single hash (#) sign varies.
+
+    linkedRecordName: The name of the record to which this alias will link.
+
+    ttl: The time-to-live value for the record. To ignore the ttl, set this value to -1.
+
+    properties: Adds object properties, including comments and user-defined fields.
+'''
+
 
 def add_Alias_Record(absname, link, ttl=86400, props='comments=EmTee|'):
     URL = BaseURL + 'addAliasRecord'
@@ -1686,6 +1717,7 @@ def parent_name(fqdn):
 
 #
 # Get the information of an Entity (Id and parentId) given a FQDN or a CIDR block
+# Quick and dirty technique, based only on the fqdn
 #
 
 def get_info_by_name(fqdn):
@@ -1698,6 +1730,53 @@ def get_info_by_name(fqdn):
         id = ent['id']
     ent['pid'] = pid
     return ent
+
+#
+# A similar function but checking both the rr_type and value
+# returns 0 if object can not be found
+#
+
+def object_find(fqdn, rr_type, value):
+    Dbug = 1
+    id = 0
+    if rr_type == 'MX':
+        (priority, value) = value.split(' ')
+
+    obj_type = RRTypeMap[rr_type]['obj_type']
+    prop_key = RRTypeMap[rr_type]['prop_key']
+
+    names = fqdn.split('.')
+    tld = names.pop()
+    tld_ent = get_entity_by_name(ViewId, tld, 'Zone')
+    pid = tld_ent['id']
+    pname = tld
+    while (len(names)):
+        name = names.pop()
+        ent = get_entity_by_name(pid, name, 'Entity')
+        obj_id = ent['id']
+        obj_ent = get_entity_by_id(obj_id)
+        if Dbug:
+            print('name, id, ent:', name, obj_id, ent)
+        if len(names) == 0 and obj_id:
+            obj_type = obj_ent['type']
+            if obj_type == 'Zone':
+                print('fqdn', fqdn, 'is a Zone')
+                pid = obj_id
+            else:
+                ents = get_entities(pid, obj_type, 0, 100)
+                if len(ents):
+                    for ent in ents:
+                        if 'properties' in ent and ent['properties'] is not None:
+                            d = props2dict(ent['properties'])
+                            if d['absoluteName'] == fqdn:
+                                if 'addresses' in d:
+                                    print('HostRecord ent', ent)
+                                    obj_id = ent['id']
+                                elif value == d[prop_key]:
+                                    obj_id = ent['id']
+        pname = name
+        pid = obj_id
+    return obj_id
 
 
 def get_id_by_name(fqdn):
@@ -1815,11 +1894,57 @@ def add_external_host(exhost):
         print(val)
 
 #
+# do a probe/get to see if a given RR exists in BAM
+# if it does return its Entity ID otherwise return False
+#
+
+def get_rr(data):
+    fqdn = data['fqdn']
+    rr_type = data['rr_type']
+    value =  data['value']
+    id = object_find(fqdn, rr_type, value)
+    return id
+
+
+#
+# delete a given generic RR
+#
+
+def delete_rr(data):
+    obj_id = get_rr(data)
+    if obj_id:
+        ent = get_entity_by_id(obj_id)
+        if ent['type'] == 'HostRecord':
+            d = props2dict(ent['properties'])
+            ips = d['addresses'].split(',')
+            removed = False
+            for xip in data['value'].split(':'):
+                if xip in ips:
+                    ips.remove(xip)
+                    removed = True
+            if removed:
+                if len(ips):
+                    d['addresses'] = ','.join(ips)
+                    d['ttl'] = data['ttl']
+                    ent['properties'] = dict2props(d)
+                    update_object(ent)
+                else:
+                    delete(obj_id)
+                print('Deleted RR associated with:', data, ent)
+            else:
+                print('No host records for', data['fqdn'], 'found with values:', data['value'])
+        else:
+            delete(obj_id)
+    else:
+        print('No RR associated with:', data)
+
+
+#
 # fqdn is at the zone level or is a new RR below a zone
 # add RR by using the lower level add_entity call
 #
 
-def add_entity_rr(data):
+def add_rr(data):
     if Debug:
         print()
         print('input data:', data)
@@ -1833,12 +1958,49 @@ def add_entity_rr(data):
 # use BAM higher level functions rather than lower level add_entity
 #
 
+    generic_ent = get_info_by_name(fqdn)
+    generic_id = generic_ent['id']
+    specific_ent = get_entity_by_id(generic_id)
+    print(generic_ent)
+    print(specific_ent)
+
+
+#
+# special treatment for A/Host Records as they can have multiple values (IP address list)
+#
+
     if rr_type == 'A':
-        ent_id = add_host_record(fqdn, value, ttl)
-        if Debug:
-            ent = get_entity_by_id(ent_id)
-            print('add_host_record:', ent)
-        return ent_id
+        obj_id = object_find(fqdn, rr_type, value)
+        if obj_id:
+            modified = False
+            print('Host Record exists, must use update')
+            host_ent = get_entity_by_id(obj_id)
+            props = host_ent['properties']
+            d = props2dict(props)
+            for ip in value.split(':'):
+                if ip not in d['addresses']:
+                    d['addresses'] += ',' + ip
+                    modified = True
+            if modified:
+                d['ttl'] = ttl
+                host_ent['properties'] = dict2props(d)
+                print('updating: after', host_ent)
+                update_object(host_ent)
+            else:
+                print('no change in HostRecord values')
+            return obj_id
+        else:
+            ips = value.replace(':', ',')
+            ent_id = add_host_record(fqdn, ips, ttl)
+            ty = type(ent_id)
+            if ty is dict:
+                if Debug:
+                    ent = get_entity_by_id(ent_id)
+                    print('add_host_record:', ent)
+                return ent_id
+            else:
+                print(ent_id)
+                return
     elif rr_type == 'TXT':
         ent_id = add_TXT_Record(fqdn, value, ttl)
         if Debug:
@@ -1859,19 +2021,67 @@ def add_entity_rr(data):
         if is_zone(fqdn):
             print('CNAME records are not allowed at the top of Zone')
             print('Existing Zone info:', ent)
-            return ent['id']
+            return ent_id
         elif ent_id:
             cname_ent = get_entity_by_id(ent_id)
             print('Multiple CNAME records are forbidden')
             print('Existing CNAME record:', cname_ent)
             return cname_ent['id']
-        else:
-            add_external_host(value)
+        link_ent = get_info_by_name(value)
+        link_id = link_ent['id']
+        if link_id:
             ent_id = add_Alias_Record(fqdn, value, ttl)
             if Debug:
                 ent = get_entity_by_id(ent_id)
                 print('add_Alias_record:', ent)
             return ent_id
+        else:
+            print('CNAME link:', value, 'must exist before it can be referenced')
+            return 0
+
+#
+# update a given RR to the state of the values given
+#
+
+def update_rr(data):
+    if Debug:
+        print()
+        print('input data', data)
+
+    fqdn = data['fqdn']
+    ttl = data['ttl']
+    rr_type = data['rr_type']
+    value = data['value']
+
+    obj_id =  object_find(fqdn, rr_type, value)
+    if obj_id:
+        prop_key = RRTypeMap[rr_type]['prop_key']
+        if rr_type ==  'MX':
+            (priority, value) = value.split(' ')
+            add_external_host(value)
+        if rr_type == 'CNAME':
+            add_external_host(value)
+        ent = get_entity_by_id(obj_id)
+        if rr_type == 'A':
+            value = value.replace(':',',')
+        if Debug:
+            print('ent bef', ent)
+        d = props2dict(ent['properties'])
+        d[prop_key] = value
+        d['ttl'] = ttl
+        if rr_type  == 'MX':
+            d['priority'] = priority
+        ent['properties'] = dict2props(d)
+        if Debug:
+            print('ent aft:', ent)
+        val = update_object(ent)
+    else:
+        print('Can not find RR')
+    return
+
+#
+# old code
+#
 
     ent_obj_type = RRTypeMap[rr_type]['obj_type']
     ent_key = RRTypeMap[rr_type]['prop_key']
@@ -1933,3 +2143,4 @@ def add_entity_rr(data):
         new_obj_id = add_entity(obj_pid, temp_ent)
         if Debug:
             print('New ObjectID', new_obj_id)
+

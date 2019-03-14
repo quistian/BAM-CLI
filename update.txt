@@ -1,5 +1,9 @@
+#add, howie.yes.uoft.ca, 600, A, 10.10.30.20
+#delete, howie.yes.uoft.ca, 6000, A, 10.10.3.30:10.10.3.20
+update, mouse.yes.uoft.ca, 600, A, 128.100.103.150:10.10.5.5
 #delete, yes.uoft.ca., 86400, MX, 3 mx2.quist.ca
-add, fox.yes.uoft.ca, 8640, CNAME, www.quist.ca
+#add, rog.yes.uoft.ca,3600, A, 10.2.3.1
+#add, fox.yes.uoft.ca, 8640, CNAME, rogers.yes.uoft.ca
 #delete, cute.yes.uoft.ca, 8640, A, 10.13.14.15
 #@delete, russ.yes.uoft.ca., 9600, TXT, I am BORG!
 #delete, mx.yes.uoft.ca., 9600, MX, 10 EmEx.quist.ca

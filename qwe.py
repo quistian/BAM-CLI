@@ -52,13 +52,13 @@ def process_bulk_data(fname):
             fqdn = row['fqdn']
             if 'uoft.ca' in row['fqdn']:
                 if action == 'update':
-                    update_rr(row)
+                    pybam.update_rr(row)
                 if action == 'add':
                     if pybam.Debug and pybam.is_zone(fqdn):
                         print('Adding RR at the zone level:', fqdn)
-                    pybam.add_entity_rr(row)
+                    pybam.add_rr(row)
                 if action == 'delete':
-                    delete_rr(row)
+                    pybam.delete_rr(row)
                 if action == 'get':
                     id = get_rr(row)
                     pent = pybam.get_parent(id)
@@ -66,51 +66,6 @@ def process_bulk_data(fname):
                     print('child:', ent)
                     print('parent', pent)
 
-#
-# do a probe/get to see if a given RR exists in BAM
-# if it does return its Entity ID otherwise return False
-#
-
-def get_rr(data):
-    fqdn = data['fqdn']
-    rr_type = data['rr_type']
-    value =  data['value']
-    id = object_find(fqdn, rr_type, value)
-    return id
-
-
-def object_find(fqdn, rr_type, value):
-    id = 0
-    if rr_type == 'MX':
-        (priority, value) = value.split(' ')
-
-    obj_type = pybam.RRTypeMap[rr_type]['obj_type']
-    prop_key = pybam.RRTypeMap[rr_type]['prop_key']
-
-    names = fqdn.split('.')
-    tld = names.pop()
-    tld_ent = pybam.get_entity_by_name(pybam.ViewId, tld, 'Zone')
-    pid = tld_ent['id']
-    pname = tld
-    while (len(names)):
-        name = names.pop()
-        ent = pybam.get_entity_by_name(pid, name, 'Entity')
-        obj_id = ent['id']
-        obj_ent = pybam.get_entity_by_id(obj_id)
-        if len(names) == 0:
-            if obj_ent['type'] == 'Zone':
-                print('fqdn', fqdn, 'is a Zone')
-                pid = obj_id
-            ents = pybam.get_entities(pid, obj_type, 0, 100)
-            if len(ents):
-                for ent in ents:
-                    if 'properties' in ent and ent['properties'] is not None:
-                        d = pybam.props2dict(ent['properties'])
-                        if d['absoluteName'] == fqdn and value == d[prop_key]:
-                            id = ent['id']
-        pname = name
-        pid = obj_id
-    return id
 
 '''
 
@@ -146,18 +101,6 @@ def add_RR_rr(data):
     print(val)
 
 
-#
-# delete a given generic RR
-#
-
-def delete_rr(data):
-    id = get_rr(data)
-    if id:
-        pybam.delete(id)
-        print('Deleted RR associated with:', data)
-    else:
-        print('No RR associated with:', data)
-
 def delete_rr_old(data):
     if pybam.Debug:
         print()
@@ -180,45 +123,6 @@ def delete_rr_old(data):
                     if pybam.Debug:
                         print('deleting:', ent)
                     pybam.delete(ent['id'])
-
-
-#
-# Perform an update to a current RR
-#
-
-
-def update_rr(data):
-    if pybam.Debug:
-        print()
-        print('input data', data)
-    (value_old, value_new) =  data['value'].split(':')
-    obj_id =  object_find(data['fqdn'], data['rr_type'], value_old)
-    if obj_id:
-        rr_type = data['rr_type']
-        ttl = data['ttl']
-        prop_key = pybam.RRTypeMap[rr_type]['prop_key']
-        if rr_type ==  'MX':
-            (priority, value) = value_new.split(' ')
-            pybam.add_external_host(value)
-        else:
-            value = value_new
-        if rr_type == 'CNAME':
-            pybam.add_external_host(value)
-        ent = pybam.get_entity_by_id(obj_id)
-        if pybam.Debug:
-            print('ent bef', ent)
-        d = pybam.props2dict(ent['properties'])
-        d[prop_key] = value
-        d['ttl'] = ttl
-        if rr_type  == 'MX':
-            d['priority'] = priority
-        ent['properties'] = pybam.dict2props(d)
-        if pybam.Debug:
-            print('ent aft:', ent)
-        val = pybam.update_object(ent)
-        print(val)
-    else:
-        print('Can not find RR')
 
 
 def test_get_entity_by_name():
