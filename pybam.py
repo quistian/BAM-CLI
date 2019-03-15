@@ -1953,91 +1953,159 @@ def add_rr(data):
     rr_type = data['rr_type']
     ttl = data['ttl']
     value = data['value']
+    obj_rr_type = RRTypeMap[rr_type]['obj_type']
+    obj_prop_key = RRTypeMap[rr_type]['prop_key']
+    name = fqdn.split('.')[0]
 
 #
 # use BAM higher level functions rather than lower level add_entity
 #
 
     generic_ent = get_info_by_name(fqdn)
-    generic_id = generic_ent['id']
-    specific_ent = get_entity_by_id(generic_id)
-    print(generic_ent)
-    print(specific_ent)
-
+    obj_id = generic_ent['id']
+    obj_type = generic_ent['type']
+    obj_pid = generic_ent['pid']
+    specific_ent = get_entity_by_id(obj_id)
+    print('generic entity:', generic_ent)
+    print('specific entity:',specific_ent)
+    is_Zone = False
+    if obj_type == 'Zone':
+        obj_pid = obj_id
+        is_Zone = True
+        name = ''
+        fqdn = '.' + fqdn
+    if obj_id:
+        ents = get_entities(obj_pid, obj_rr_type, 0, 100)
+        if Debug:
+            for ent in ents:
+                print('\t', ent)
 
 #
 # special treatment for A/Host Records as they can have multiple values (IP address list)
 #
 
     if rr_type == 'A':
-        obj_id = object_find(fqdn, rr_type, value)
-        if obj_id:
-            modified = False
-            print('Host Record exists, must use update')
-            host_ent = get_entity_by_id(obj_id)
-            props = host_ent['properties']
-            d = props2dict(props)
-            for ip in value.split(':'):
-                if ip not in d['addresses']:
-                    d['addresses'] += ',' + ip
-                    modified = True
-            if modified:
-                d['ttl'] = ttl
-                host_ent['properties'] = dict2props(d)
-                print('updating: after', host_ent)
-                update_object(host_ent)
-            else:
-                print('no change in HostRecord values')
-            return obj_id
-        else:
-            ips = value.replace(':', ',')
-            ent_id = add_host_record(fqdn, ips, ttl)
-            ty = type(ent_id)
-            if ty is dict:
+        values = value.replace(':', ',')
+        if obj_id: # if there were some RRs found
+            old_ips = []
+            new_ips = values.split(',')
+            for ent in ents:
+                if name == ent['name']:
+                    if Debug:
+                        print('update before:',ent)
+                    props = ent['properties']
+                    d = props2dict(ent['properties'])
+                    old_ttl = d['ttl']
+                    old_ips = d[obj_prop_key].split(',')
+                    ips = list(set(new_ips) | set(old_ips))
+                    if sorted(ips) != sorted(old_ips) or ttl != old_ttl:
+                        d[obj_prop_key] = ','.join((ips))
+                        d['ttl'] = ttl
+                        ent['properties'] = dict2props(d)
+                        if Debug:
+                            print('update after:',ent)
+                        update_object(ent)
+                    else:
+                        print('No new Host Records to add')
+                    obj_id = 0
+                    break
+            if obj_id: # no resource record matches found in the list of ents
                 if Debug:
-                    ent = get_entity_by_id(ent_id)
-                    print('add_host_record:', ent)
-                return ent_id
-            else:
-                print(ent_id)
-                return
-    elif rr_type == 'TXT':
-        ent_id = add_TXT_Record(fqdn, value, ttl)
-        if Debug:
-            ent = get_entity_by_id(ent_id)
-            print('add_TXT_record:', ent)
-        return ent_id
-    elif rr_type == 'MX':
-        (priority, mx_host) = value.split(' ')
-        add_external_host(mx_host)
-        ent_id = add_MX_Record(fqdn, priority, mx_host, ttl)
-        if Debug:
-            ent = get_entity_by_id(ent_id)
-            print('add_MX_record:', ent)
-        return ent_id
-    elif rr_type == 'CNAME':
-        ent = get_info_by_name(fqdn)
-        ent_id = ent['id']
-        if is_zone(fqdn):
-            print('CNAME records are not allowed at the top of Zone')
-            print('Existing Zone info:', ent)
-            return ent_id
-        elif ent_id:
-            cname_ent = get_entity_by_id(ent_id)
-            print('Multiple CNAME records are forbidden')
-            print('Existing CNAME record:', cname_ent)
-            return cname_ent['id']
-        link_ent = get_info_by_name(value)
-        link_id = link_ent['id']
-        if link_id:
-            ent_id = add_Alias_Record(fqdn, value, ttl)
+                    print('Adding a new Resource Record')
+                    print(specific_ent)
+                obj_id = add_host_record(fqdn, values, ttl)
+        else:   # no resource records of all of rr_type at zone or sub-zone level
             if Debug:
-                ent = get_entity_by_id(ent_id)
-                print('add_Alias_record:', ent)
-            return ent_id
+                print('Adding a First Resource Record of type:', obj_rr_type)
+            obj_id = add_host_record(fqdn, values, ttl)
+
+    elif rr_type == 'TXT':
+        if obj_id:
+            updated = False
+            duplicate = False
+            for ent in ents:
+                d = props2dict(ent['properties'])
+                if name == ent['name'] and value == d[obj_prop_key]:
+                    duplicate = True
+                    if ttl != d['ttl']:
+                        d['ttl'] = ttl
+                        ent['properties'] = dict2props(d)
+                        update_object(ent)
+                        updated = True
+                    break
+            if updated:
+                print('TXT record TTL updated:')
+            elif duplicate:
+                print('Duplicate of existing TXT record:')
+            else:
+                obj_id = add_TXT_Record(fqdn, value, ttl)
+                ent = get_entity_by_id(obj_id)
+                print('added new TXT record:', ent)
+        else: # No TXT records at all
+            obj_id = add_TXT_Record(fqdn, value, ttl)
+            ent = get_entity_by_id(obj_id)
+            print('added new TXT record:', ent)
+        return obj_id
+
+    elif rr_type == 'MX':
+        ent_id = 0
+        (priority, mx_host) = value.split(' ')
+#       add_external_host(mx_host)
+        if obj_id:
+            change = True
+            for ent in ents:
+                props = ent['properties']
+                d = props2dict(props)
+                if name == ent['name']:
+                    if mx_host == d[obj_prop_key]:
+                        if priority == d['priority']:
+                            if ttl == d['ttl']:
+                                change = False
+                                break
+            if change:
+                ent_id = add_MX_Record(fqdn, priority, mx_host, ttl)
+                if type(ent_id) is str: 
+                    print(ent_id)
+                else:
+                    print(ent_id, get_entity_by_id(ent_id))
+            else:
+                print('Duplicate MX Record')
         else:
-            print('CNAME link:', value, 'must exist before it can be referenced')
+            ent_id = add_MX_Record(fqdn, priority, mx_host, ttl)
+            if type(ent_id) is str: 
+                print(ent_id)
+            else:
+                print(ent_id, get_entity_by_id(ent_id))
+        return ent_id
+
+    elif rr_type == 'CNAME':
+        ent = get_info_by_name(value)
+        obj_type = ent['type']
+        if not ( obj_type == 'HostRecord' or obj_type == 'ExternalHostRecord' ):
+            print('The CNAME target:', value, ' must be an existing HostRecord or ExternalHostRecord')
             return 0
+        ent_id = 0
+        if is_Zone:
+            print('CNAME records are not allowed at the top of a Zone')
+        if obj_id:
+            cname_exists = False
+            for ent in ents:
+                if name == ent['name']:
+                    print('A CNAME record already exists')
+                    d = props2dict(ent['properties'])
+                    if ttl != d['ttl'] or d[obj_prop_key] != value:
+                        print('Updating it with the given data')
+                        d[obj_prop_key] = value
+                        d['ttl'] = ttl
+                        ent['properties'] = dict2props(d)
+                        update_object(ent)
+                    cname_exists = True
+                    break
+            if not cname_exists:
+                obj_id = add_Alias_Record(fqdn, value, ttl)
+        else:
+            obj_id = add_Alias_Record(fqdn, value, ttl)
+        return obj_id
 
 #
 # update a given RR to the state of the values given
@@ -2092,9 +2160,6 @@ def update_rr(data):
         'comments': 'Nothing yet',
     }
 
-    ent = get_info_by_name(fqdn)
-    if Debug:
-        print('initial get_info entity:', ent)
     obj_id = ent['id']
     obj_pid = ent['pid']
     obj_type = ent['type']
@@ -2112,6 +2177,8 @@ def update_rr(data):
             print('CNAME records are not allowed at the top of Zone')
             print('Existing Zone info:', zone_ent)
             return
+        ent = get_info_by_name(value)
+        print('alias target:', ent)
         if obj_id:
             cname_ent = get_entity_by_id(ent['id'])
             print('Multiple CNAME records are forbidden')
