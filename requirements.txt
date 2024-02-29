@@ -1,0 +1,6 @@
+bluecat-libraries
+progressbar2
+psycopg2
+python-dotenv
+requests
+setuptools
