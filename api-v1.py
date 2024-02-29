@@ -229,7 +229,8 @@ def get_hr_nums():
     except psycopg2.Error as e:
         print(f'Database error: {e.pgerror}')
 
-#    conn = psycopg2.conn(dbname='obm', user='eng_ro_api', password='w7NDGTzm')
+#    conn = psycopg2.conn(dbname='obm', user='bozo-the-clown',
+#    password='no-use-even-trying-to-guess!!!!')
 
 def get_azure_zones():
     azones = []
