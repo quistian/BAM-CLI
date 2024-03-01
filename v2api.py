@@ -43,7 +43,7 @@ See:
     by a colon. This string can be injected directly into request
     Authorization headers in the following format:
 
-    Authorization: Basic YXBpOlQ0OExOT3VIRGhDcnVBNEo1bGFES3JuS3hTZC9QK3pjczZXTzBJMDY=
+    Authorization: Basic Blah
 
 '''
 
@@ -64,11 +64,23 @@ ExHostZoneID = 0
 BlockID = 0
 
 RR_Types = [
-        'GenericRecord',
-        'HostRecord',
-        'ExternalHostRecord',
-        'AliasRecord',
-        'ExternalHostsZone',
+    'AliasRecord',
+    'GenericRecord',
+    'HINFORecord',
+    'HostRecord',
+    'ExternalHostRecord',
+    'ExternalHostsZone',
+    'NAPTRRecord',
+    'SRVRecord',
+    'TXTRecord',
+]
+
+Generic_RR_Types = [
+    'A',
+    'AAAA',
+    'DNAME',
+    'SFP',
+    'PTR',
 ]
 
 Network_Types = [
@@ -1058,7 +1070,7 @@ def get_rrs(cid=ConfID, params={}):
 
 '''
 
-Get all Resource Records for a specific zone iD
+Get _all_ Resource Records for a specific zone iD
 
 '''
 
@@ -1072,9 +1084,16 @@ Get RRs for specific zone ID and BlueCat RR type
 '''
 
 def get_zone_rrs_by_type(zid, rr_type=None):
-    params = {
-        'filter': f"type:eq('{rr_type}')",
-    }
+    if Debug:
+        print(f'Getting RRs for Zone {zid} of type {rr_type}')
+    if rr_type in RR_Types:
+        params = {
+            'filter': f"type:eq('{rr_type}')",
+        }
+    elif rr_type in Generic_RR_Types:
+        params = {
+                'filter': "type:eq('GenericRecord') and recordType:eq('A')",
+        }
     return get_zone_rrs(zid, params)
 
 def get_zone_generic_rrs(zid):
@@ -1173,33 +1192,22 @@ def create_rr(fqdn, RR_type, value):
     (name, zone, zid) = decouple(fqdn)
     if not zid:
         zid = create_zone(zone)  # this will create the zone if not already there
+
     payload = {
         'name': name,
         'type': RR_type,
         'ttl': TTL,
     }
+
     if RR_type == 'GenericRecord':
         (rr_type, rdata) = value.split('~')
         payload['recordType'] = rr_type
         payload['rdata'] = rdata
 
-    elif RR_type == 'AliasRecord':
-        ex_host_id = create_ex_host(value)
-        payload['linkedRecord'] = {
-            'id': ex_host_id,
-            'type': 'ExternalHostRecord',
-        }
-
-    elif RR_type == 'MXRecord':
-        if mx_host_id := is_Host_rr(value):
-            payload['linkedRecord'] = {
-                'id': mx_host_id,
-                'type': 'HostRecord',
-            }
-        else:
-            if Debug:
-                print(f'There is no MX hostname corresponding to {value}')
-            return False
+    elif RR_type == 'HINFORecord':
+        (os, cpu) = value.split('~')
+        payload['os'] = os
+        payload['cpu'] = cpu
 
     elif RR_type == 'HostRecord':
         toks = value.split(Dot)
@@ -1215,6 +1223,26 @@ def create_rr(fqdn, RR_type, value):
             }
         ]
 
+    elif RR_type == 'TXTRecord':
+        payload['text'] = value
+
+# Indirection cases
+    elif RR_type == 'AliasRecord':
+        ex_host_id = create_ex_host(value)
+        payload['linkedRecord'] = {
+            'id': ex_host_id,
+            'type': 'ExternalHostRecord',
+        }
+
+    elif RR_type == 'MXRecord':
+        mx_host_id = create_ex_host(value)
+        if mx_host_id := is_Host_rr(value):
+            payload['linkedRecord'] = {
+                'id': mx_host_id,
+                'type': 'ExternalHostRecord',
+            }
+
+# Create the RR via https
     resp = req(
         'POST',
         f'/zones/{zid}/resourceRecords',
@@ -1263,6 +1291,15 @@ A HostRecord of value 10.141.5.5 for hrec2.c.b.a.com was created
  }
 
 '''
+# RRs with a level in Indirection
+def create_alias_rr(fqdn, exhost):
+    return create_rr(fqdn, 'AliasRecord', exhost)
+
+def create_mx_rr(fqdn, mxhost):
+    return create_rr(fqdn, 'MXRecord', mxhost)
+
+
+# Regular RRs
 
 def create_hostrecord(fqdn, ipaddr):
     return create_rr(fqdn, 'HostRecord', ipaddr)
@@ -1270,15 +1307,19 @@ def create_hostrecord(fqdn, ipaddr):
 def create_generic_rr(fqdn, rr_type, value):
     return create_rr(fqdn, 'GenericRecord', f'{rr_type}~{value}')
 
-def create_alias_rr(fqdn, exhost):
-    return create_rr(fqdn, 'AliasRecord', exhost)
+def create_txt_rr(fqdn, rr_type, value):
+    return create_rr(fqdn, 'TXTRecord', txt_str)
+
+'''
+
+Graceful Representations of the above creation rr routines
+add_ rather than create_
+
+'''
 
 def add_CNAME_rr(fqdn, exhost):
     if not is_CNAME_rr(fqdn):
         return create_alias_rr(fqdn, exhost)
-
-def create_mx_rr(fqdn, mxhost):
-    return create_rr(fqdn, 'MXRecord', mxhost)
 
 '''
 Add an Generic A record gracefully
@@ -1288,6 +1329,12 @@ Will create the subzone if it is not already there
 def add_A_rr(fqdn, value):
     if not is_A_rr(fqdn, value):
         return create_generic_rr(fqdn, 'A', value)
+    else:
+        return False
+
+def add_TXT_rr(fqdn, text):
+    if not is_TXT_rr(fqdn, text):
+        return create_rr(fqdn, 'TXTRecord', text)
     else:
         return False
 
@@ -1324,10 +1371,25 @@ def is_CNAME_rr(fqdn):
         print(f'No corresponding CNAME record for {fqdn}')
     return False
 
+def is_TXT_rr(fqdn, value):
+    (hname, zone, zid) = decouple(fqdn)
+    if zid:
+        rrs = get_zone_rrs_by_type(zid, 'TXTRecord')
+        for rr in rrs:
+            if rr['name'] == hname and rr['text'] == value:
+                return rr['id']
+        if Debug:
+            print(f'No TXT RRs were found corresponding to {fqdn} and {value}')
+        return False
+    else:
+        if Debug:
+            print(f'There is no zone {zone} corresponding to the TXT record for hostname {fqdn}')
+        return False
+
 def is_A_rr(fqdn, value):
     (hname, zone, zid) = decouple(fqdn)
     if zid:
-        rrs = get_zone_A_rrs(zid)
+        rrs = get_zone_rrs_by_type('A')
         for rr in rrs:
             if rr['name'] == hname and rr['rdata'] == value:
                 return rr['id']
@@ -1367,6 +1429,18 @@ def delete_rr_by_id(rr_id):
     resp = req('DELETE', f'/resourceRecords/{rr_id}')
     if not resp.ok:
         print(f'Error in deleting: {fqdn}')
+
+def delete_TXT_rr(fqdn, txt):
+    (hname, zone, zid) = decouple(fqdn)
+    if rr_id := is_TXT_rr(fqdn, txt):
+        delete_rr_by_id(rr_id)
+        if Debug:
+            print(f'TXT RR {fqdn} with value {txt} deleted')
+        return True
+    else:
+        if Debug:
+            print(f'No TXT RR {fqdn} with value {txt} to delete')
+        return False
 
 def delete_A_rr(fqdn, value):
     (hname, zone, zid) = decouple(fqdn)
@@ -1599,12 +1673,16 @@ def test(nm,z):
     params = {}
 
     az_zone = 'privatelink.openai.azure.com'
-    hname = 'q434-bozo-2.434'
+    hr_num = '434'
+    hname = f'q{hr_num}-txt-rr'
+    fqdn = f'{hname}.{hr_num}.{az_zone}'
 
-    fqdn = f'{hname}.{az_zone}'
-    data = get_hostname_addresses(fqdn)
-    print(data)
+    data = delete_TXT_rr(fqdn, 'Brian Mulroney has been deceased!')
+    data = add_TXT_rr(fqdn, 'Brian Mulroney is now resurrected') 
+    pprint(data)
+
     exit()
+    data = get_hostname_addresses(fqdn)
     data = add_Host_rr(f'q434-bozo-2.434.{az_zone}', '10.141.10.10')
     pprint(data)
 
