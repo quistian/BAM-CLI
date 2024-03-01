@@ -63,6 +63,23 @@ ViewID = 0
 ExHostZoneID = 0
 BlockID = 0
 
+RR_Types = [
+        'GenericRecord',
+        'HostRecord',
+        'ExternalHostRecord',
+        'AliasRecord',
+        'ExternalHostsZone',
+]
+
+Network_Types = [
+  'IPvvBlock',
+  'IPv6Block',
+  'IPv4Network',
+  'IPv6Network',
+  'IPv4Address',
+  'IPv6Address',
+]
+
 TTL = 3600
 
 URL = os.environ.get('BAM_APIv2_URL')
@@ -777,6 +794,23 @@ def is_ipv4_network(cidr):
     return False
 
 '''
+Get a list of IP addresses corresponding to a given Hostname RR
+returns a list of them
+'''
+
+def get_addresses_by_hostname_id(hostid):
+    addrs = list()
+    resp = req(
+        'GET',
+        f'/resourceRecords/{hostid}/addresses',
+        params = { 'fields': 'address' },
+    )
+    data = resp.json()
+    for add_dict in data['data']:
+        addrs.append(add_dict['address'])
+    return addrs
+
+'''
 get_zones: Retrieve information about _all_ zones from all Configurations and Views
 
 {'_links': {'accessRights': {'href': '/api/v2/zones/100918/accessRights'},
@@ -936,6 +970,7 @@ def get_collection_zones(cid, params={}):
 
 '''
 Creates a Zone using recursion
+Checking first to see if it exists
 '''
 
 def create_zone(zone):
@@ -949,14 +984,20 @@ def create_zone(zone):
             'type': 'Zone',
             'name': zname,
         }
-        resp = req('POST', f'/zones/{pzid}/zones', json=payload)
+        resp = req(
+            'POST',
+            f'/zones/{pzid}/zones',
+            json=payload
+        )
         if resp.ok:
-            print(f'new zone: {zone} has been created')
-        else:
             data = resp.json()
             if Debug:
+                print(f'new zone: {zone} has been created')
                 pprint(data)
             return data['id']
+        else:
+            print(f'There was a problem creating subzone: {zone}')
+            return False
 
 '''
 
@@ -1015,10 +1056,20 @@ def get_rrs(cid=ConfID, params={}):
     data = resp.json()
     return data
 
+'''
+
+Get all Resource Records for a specific zone iD
+
+'''
+
 def get_zone_rrs(zid, params={}):
     resp = req('GET', f'/zones/{zid}/resourceRecords', params=params)
     data = resp.json()
     return data['data']
+
+'''
+Get RRs for specific zone ID and BlueCat RR type
+'''
 
 def get_zone_rrs_by_type(zid, rr_type=None):
     params = {
@@ -1029,14 +1080,27 @@ def get_zone_rrs_by_type(zid, rr_type=None):
 def get_zone_generic_rrs(zid):
     return get_zone_rrs_by_type(zid, 'GenericRecord')
 
-def get_zone_cname_rrs(zid):
-    return get_zone_rrs_by_type(zid, 'AliasRecord')
-
 def get_zone_A_rrs(zid):
     params = {
             'filter': "type:eq('GenericRecord') and recordType:eq('A')",
     }
     return get_zone_rrs(zid, params=params)
+
+def get_zone_cname_rrs(zid):
+    return get_zone_rrs_by_type(zid, 'AliasRecord')
+
+def get_zone_hostname_rrs(zid):
+    return get_zone_rrs_by_type(zid, 'HostRecord')
+
+def get_hostname_addresses(fqdn):
+    addrs = []
+    (hname, zone, zid) = decouple(fqdn)
+    if zid:
+        rrs = get_zone_hostname_rrs(zid)
+        for rr in rrs:
+            if rr['name'] == hname:
+                addrs = get_addresses_by_hostname_id(rr['id'])
+    return addrs
 
 def get_collection_rrs(cid, params={}):
     resp = req('GET', f'/deployments/{cid}/addedRecords', params=params)
@@ -1118,12 +1182,25 @@ def create_rr(fqdn, RR_type, value):
         (rr_type, rdata) = value.split('~')
         payload['recordType'] = rr_type
         payload['rdata'] = rdata
+
     elif RR_type == 'AliasRecord':
         ex_host_id = create_ex_host(value)
         payload['linkedRecord'] = {
             'id': ex_host_id,
             'type': 'ExternalHostRecord',
         }
+
+    elif RR_type == 'MXRecord':
+        if mx_host_id := is_Host_rr(value):
+            payload['linkedRecord'] = {
+                'id': mx_host_id,
+                'type': 'HostRecord',
+            }
+        else:
+            if Debug:
+                print(f'There is no MX hostname corresponding to {value}')
+            return False
+
     elif RR_type == 'HostRecord':
         toks = value.split(Dot)
         toks[3] = '0'
@@ -1137,7 +1214,13 @@ def create_rr(fqdn, RR_type, value):
                 'address': value
             }
         ]
-    resp = req('POST', f'/zones/{zid}/resourceRecords', json=payload)
+
+    resp = req(
+        'POST',
+        f'/zones/{zid}/resourceRecords',
+        json=payload,
+    )
+
     if resp.ok:
         data = resp.json()
         print(f'A {RR_type} of value {value} for {fqdn} was created')
@@ -1194,6 +1277,14 @@ def add_CNAME_rr(fqdn, exhost):
     if not is_CNAME_rr(fqdn):
         return create_alias_rr(fqdn, exhost)
 
+def create_mx_rr(fqdn, mxhost):
+    return create_rr(fqdn, 'MXRecord', mxhost)
+
+'''
+Add an Generic A record gracefully
+Will create the subzone if it is not already there
+'''
+
 def add_A_rr(fqdn, value):
     if not is_A_rr(fqdn, value):
         return create_generic_rr(fqdn, 'A', value)
@@ -1201,20 +1292,27 @@ def add_A_rr(fqdn, value):
         return False
 
 def add_Host_rr(fqdn, value):
-    return
+    if not is_Host_rr(fqdn):
+        create_hostrecord(fqdn, value)
+    else:
+        return False
 
 def is_generic_rr(fqdn, RR_type, value):
-    (name, zone, zid) = decouple(fqdn)
-    rrs = get_generic_rrs(zid)
-    pprint(rrs)
-    for rr in rrs:
-        if rr['name'] == name and  rr['recordType'] == RR_type == value:
-            if Debug:
-                print(f'Found a matching RR for {fqdn} of type: {RR_type}')
-            return rr['id']
-    return False
-    print(f'Subzone: {zone} does not exist')
-    return False
+    (hname, zone, zid) = decouple(fqdn)
+    if zid:
+        rrs = get_generic_rrs(zid)
+        for rr in rrs:
+            if rr['hname'] == name and  rr['recordType'] == RR_type and rr['rdata'] == value:
+                if Debug:
+                    print(f'Found a matching RR for {fqdn} of type: {RR_type} with value {value}')
+                return rr['id']
+        if Debug:
+            print(f'No  matching RRs for {fqdn} of type {RR_type} and value {value}')
+        return False
+    else:
+        if Debug:
+            print(f'Subzone: {zone} does not exist for the Generic Record with hostname {fqdn}')
+        return False
 
 def is_CNAME_rr(fqdn):
     (nm, zone, zid) = decouple(fqdn)
@@ -1227,12 +1325,34 @@ def is_CNAME_rr(fqdn):
     return False
 
 def is_A_rr(fqdn, value):
-    (nm, zone, zid) = decouple(fqdn)
-    rrs = get_zone_A_rrs(zid)
-    for rr in rrs:
-        if rr['name'] == nm and rr['rdata'] == value:
-            return rr['id']
-    return False
+    (hname, zone, zid) = decouple(fqdn)
+    if zid:
+        rrs = get_zone_A_rrs(zid)
+        for rr in rrs:
+            if rr['name'] == hname and rr['rdata'] == value:
+                return rr['id']
+        if Debug:
+            print(f'No A RRs were found corresponding to {fqdn} and {value}')
+        return False
+    else:
+        if Debug:
+            print(f'There is no zone {zone} corresponding to the A record for hostname {fqdn}')
+        return False
+
+def is_Host_rr(fqdn, value='10.141.0.0'):
+    (hname, zone, zid) = decouple(fqdn)
+    if zid:
+        rrs = get_zone_hostname_rrs(zid)
+        for rr in rrs:
+            if rr['name'] == hname:
+                return rr['id']
+        if Debug:
+            print(f'No Hostname A RRs were found corresponding to {fqdn}')
+        return False
+    else:
+        if Debug:
+            print(f'There is no zone {zone} corresponding to any Host records for the hostname {fqdn}')
+        return False
 
 def delete_generic_rr(fqdn, RR_type, value):
     rr_id = is_generic_rr(fqdn, RR_type, value)
@@ -1249,10 +1369,17 @@ def delete_rr_by_id(rr_id):
         print(f'Error in deleting: {fqdn}')
 
 def delete_A_rr(fqdn, value):
-    rr_id = is_A_rr(fqdn, value)
-    if rr_id:
-        delete__rr_by_id(rr_id)
+    (hname, zone, zid) = decouple(fqdn)
+    if zid:
+        if rr_id := is_A_rr(zid, fqdn, value):
+            delete_rr_by_id(rr_id)
+        else:
+            if Debug:
+                print(f'There was no A record with value {value} corresponding to {fqdn}')
+            return rr_id
     else:
+        if Debug:
+            print(f'{fqdn} was not deleted as {zone} does not yet exist')
         return False
 
 '''
@@ -1471,9 +1598,23 @@ def req(method='GET', url='', params={}, json={}):
 def test(nm,z):
     params = {}
 
-    data = create_hostrecord(f'hrec3.{z}', '10.141.10.5')
-    pprint(data)
+    az_zone = 'privatelink.openai.azure.com'
+    hname = 'q434-bozo-2.434'
+
+    fqdn = f'{hname}.{az_zone}'
+    data = get_hostname_addresses(fqdn)
+    print(data)
     exit()
+    data = add_Host_rr(f'q434-bozo-2.434.{az_zone}', '10.141.10.10')
+    pprint(data)
+
+    data = add_A_rr(f'q434-test.434.{az_zone}', '10.141.15.15')
+    pprint(data)
+
+
+
+    data = create_zone(az_zone)
+    data = create_hostrecord(f'hrec3.{z}', '10.141.10.5')
     delete_network('10.141.10.0/24')
     data = add_ipv4_network('10.141.1.0/24')
     pprint(data)
@@ -1500,7 +1641,6 @@ def test(nm,z):
     pprint(data)
     exit()
 
-    data = add_A_rr(f'{nm}-test.{z}', '1.2.3.4')
     print(data)
     exit()
 
