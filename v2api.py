@@ -1,9 +1,12 @@
 #!/usr/bin/env python3
 
+import csv
+import getopt
+import json
 import os
 import sys
-import json
-import csv
+
+import re
 import requests
 
 from pprint import pprint
@@ -50,8 +53,8 @@ See:
 load_dotenv("/home/russ/.bamrc")
 Ca_bundle = '/etc/ssl/Sectigo-AAA-chain.pem'
 
-Debug = False
 Debug = True
+Debug = False
 
 Dot = '.'
 
@@ -62,6 +65,8 @@ ConfID = 0
 ViewID = 0
 ExHostZoneID = 0
 BlockID = 0
+
+ViewZones = dict()
 
 RR_Types = [
     'AliasRecord',
@@ -136,7 +141,8 @@ Response:
 '''
 
 def basic_auth(nm, pw):
-    global ConfID, ViewID, ExHostZoneID, Header, Auth_header, BlockID
+    global ConfID, ViewID, ExHostZoneID, BlockID
+    global Auth_header, Header, ViewZones
 
     payload = {
         'username': nm,
@@ -158,9 +164,9 @@ def basic_auth(nm, pw):
         BlockID = data[0]['id']
     else:
         BlockID = create_block(ConfID, CIDRBlock)
-
     if Debug:
         print(BlockID)
+    ViewZones = get_all_zones(ConfID, ViewID)
 
     return tok
 
@@ -823,6 +829,7 @@ def get_addresses_by_hostname_id(hostid):
     return addrs
 
 '''
+
 get_zones: Retrieve information about _all_ zones from all Configurations and Views
 
 {'_links': {'accessRights': {'href': '/api/v2/zones/100918/accessRights'},
@@ -896,6 +903,9 @@ Zone from Zone list
 def get_zones(params={}):
     resp = req('GET', '/zones', params=params)
     data = resp.json()
+    if Debug:
+        if 'totalCount' in data:
+            print(f'totalCount: {data["totalCount"]}')
     return data['data']
 
 '''
@@ -972,41 +982,69 @@ Returns a list of Zones, one level below the View i.e. TLDS
 
 '''
 
-def get_collection_zones(cid, params={}):
+def get_collection_zones(colid, params={}):
     collection = 'zones'
-    if cid == ViewID:
+    if colid == ViewID:
         collection = 'views'
-    resp = req('GET', f'/{collection}/{cid}/zones', params=params)
+    resp = req('GET', f'/{collection}/{colid}/zones', params=params)
     data = resp.json()
     return data['data']
 
 '''
-Creates a Zone using recursion
-Checking first to see if it exists
+Create a Zone from the root (View ID)
+towards the leaf end point
 '''
 
 def create_zone(zone):
+    pzid = ViewID
+    community = 'views'
+    payload = {
+        'type': 'Zone',
+        'absoluteName': zone,
+    }
+    resp = req(
+        'POST',
+        f'/{community}/{pzid}/zones',
+        json=payload
+    )
+    if resp.ok:
+        data = resp.json()
+        return data['id']
+    else:
+        return False
+
+'''
+Creates a Zone using recursion
+Checking first to see if it exists
+Needs to change at the root to use views rather than zones as the collection
+'''
+
+def create_zone_recursively(zone):
+    global ViewZones
     zid = is_zone(zone)
     if zid:
         return zid
     else:
         (zname, subzone, subzid) = decouple(zone)
-        pzid = create_zone(subzone)
+        pzid = create_zone_recursvely(subzone)
+        community = 'zones'
         payload = {
             'type': 'Zone',
             'name': zname,
         }
         resp = req(
             'POST',
-            f'/zones/{pzid}/zones',
+            f'/{community}/{pzid}/zones',
             json=payload
         )
         if resp.ok:
             data = resp.json()
+            zid = data['id']
             if Debug:
-                print(f'new zone: {zone} has been created')
+                print(f'new zone: {zone} with ID {zid} has been created')
                 pprint(data)
-            return data['id']
+            ViewZones[zone] = zid
+            return zid
         else:
             print(f'There was a problem creating subzone: {zone}')
             return False
@@ -1018,11 +1056,14 @@ Deletes a Zone if it exists
 '''
 
 def delete_zone(zone):
+    global ViewZones
     zid = is_zone(zone)
     if zid:
         resp = req('DELETE', f'/zones/{zid}')
-        if resp.ok:
-            print(f'Zone: {zone} has been deleted')
+        if resp.status_code == 204:
+            if Debug:
+                print(f'Zone: {zone} has been deleted')
+            del ViewZones[zone]
             return True
         else:
             data = resp.json()
@@ -1083,17 +1124,13 @@ def get_zone_rrs(zid, params={}):
 Get RRs for specific zone ID and BlueCat RR type
 '''
 
-def get_zone_rrs_by_type(zid, rr_type=None):
+def get_zone_rrs_by_type(zid, rr_type, params={}):
     if Debug:
         print(f'Getting RRs for Zone {zid} of type {rr_type}')
     if rr_type in RR_Types:
-        params = {
-            'filter': f"type:eq('{rr_type}')",
-        }
+        params['filter'] = f"type:eq('{rr_type}')"
     elif rr_type in Generic_RR_Types:
-        params = {
-                'filter': "type:eq('GenericRecord') and recordType:eq('A')",
-        }
+        params['filter'] = f"type:eq('GenericRecord') and recordType:eq('{rr_type}')"
     return get_zone_rrs(zid, params)
 
 def get_zone_generic_rrs(zid):
@@ -1101,6 +1138,7 @@ def get_zone_generic_rrs(zid):
 
 def get_zone_A_rrs(zid):
     params = {
+            'fields': 'absoluteName,rdata',
             'filter': "type:eq('GenericRecord') and recordType:eq('A')",
     }
     return get_zone_rrs(zid, params=params)
@@ -1109,7 +1147,31 @@ def get_zone_cname_rrs(zid):
     return get_zone_rrs_by_type(zid, 'AliasRecord')
 
 def get_zone_hostname_rrs(zid):
-    return get_zone_rrs_by_type(zid, 'HostRecord')
+    hname_list = list()
+    params = {
+            'fields': 'absoluteName,id',
+            'filter': "type:eq('HostRecord')",
+    }
+    rrs = get_zone_rrs(zid, params=params)
+    for rr in rrs:
+        addrs = get_addresses_by_hostname_id(rr['id'])
+        rr['ipaddr'] = addrs
+        hname_list.append(rr)
+    return hname_list
+
+'''
+
+a_rrs = 
+
+'''
+
+def get_all_A_rrs(zid):
+    rr_dict = dict()
+    for rr in get_zone_A_rrs(zid):
+        rr_dict[rr['absoluteName']] = rr['rdata']
+    for rr in get_zone_hostname_rrs(zid):
+        rr_dict[rr['absoluteName']] = rr['ipaddr'][0]
+    return rr_dict
 
 def get_hostname_addresses(fqdn):
     addrs = []
@@ -1568,17 +1630,32 @@ def get_view_zones(vid, params={}):
     data = get_collection_zones(vid, params=params)
     return data
 
-def get_all_zones():
+'''
+Get all the zones in the given View and Config
+
+'''
+
+def get_all_zones(cid, vid):
     dd = dict()
     params = {
         'limit': 5000,
         'fields': 'absoluteName,id',
-        'filter': f"view.id:eq({ViewID}) and type:eq('Zone')",
+        'filter': f"configuration.id:eq({cid}) and view.id:eq({vid}) and type:eq('Zone')",
     }
     zones = get_zones(params)
     for zone in zones:
         dd[zone['absoluteName']] = zone['id']
     return dd
+
+
+def get_all_leaf_zones():
+    zlist = list()
+    for zone in ViewZones:
+        toks = zone.split(Dot)
+        leaf = toks.pop(0)
+        if re.match('[1-9][0-9][0-9]', leaf):
+            zlist.append(zone)
+    return zlist
 
 '''
 if zone exists return its Zone ID
@@ -1588,9 +1665,8 @@ Does not create a Zone rather returns False if not there
 '''
 
 def is_zone(zone):
-    zones = get_all_zones()
-    if zone in zones:
-        return zones[zone]
+    if zone in ViewZones:
+        return ViewZones[zone]
     else:
         return False
 
@@ -1659,6 +1735,9 @@ def req(method='GET', url='', params={}, json={}):
         print('Connection error')
 
     if resp.ok:
+        if Debug:
+            print(f'URL: {resp.url}')
+            print('result')
         return resp
     else:
         print(f'return code: {resp.status_code}')
@@ -1674,10 +1753,36 @@ def test(nm,z):
 
     az_zone = 'privatelink.openai.azure.com'
     hr_num = '434'
+    hr_num = '543'
+    hr_num = '278'
     hname = f'q{hr_num}-txt-rr'
     fqdn = f'{hname}.{hr_num}.{az_zone}'
 
+    zone = f'{hr_num}.{az_zone}'
+    zone = 'i.was.once.to'
+
+    zid = get_zone_id(f'{hr_num}.{az_zone}')
+    data = get_zone_rrs(zid)
+    pprint(data)
+    exit()
+
+    data = delete_zone(zone)
+    data = create_zone(zone)
+    pprint(data)
+
+
+    data = get_collection_zones(ViewID, params=params)
+    zones = get_all_leaf_zones()
+    for zone in zones:
+        zid = get_zone_id(zone)
+        data = get_all_A_rrs(zid)
+        if len(data):
+            pprint(data)
+
+    exit()
+
     data = delete_TXT_rr(fqdn, 'Brian Mulroney has been deceased!')
+    pprint(data)
     data = add_TXT_rr(fqdn, 'Brian Mulroney is now resurrected') 
     pprint(data)
 
@@ -1749,6 +1854,28 @@ def decouple(fqdn):
     return(name, zone, zid)
 
 def main():
+    global Debug
+
+    arglist= sys.argv[1:]
+#options
+    opts = 'hdvq'
+# longer options
+    long_opts = ['help', 'debug', 'verbose', 'quiet']
+    try:
+        args, vals = getopt.getopt(arglist, opts, long_opts)
+        for cur_arg,cur_val in args:
+            if cur_arg in ['-h', '--help']:
+                print('This is a holding area for help information')
+                exit()
+            elif cur_arg in ['-d', '--debug']:
+                Debug = True
+            elif cur_arg in ['-v', '--verbose']:
+                Debug = True
+            elif cur_arg in ['-q', '--quiet']:
+                Debug = False
+    except getopt.error as err:
+        print(str(err))
+        exit()
 
     tok = basic_auth(uname, pw)
 
@@ -1766,7 +1893,7 @@ def main():
     update_A_rr(fqdn1, '14.11.12.14')
     delete_A_rr(fqdn3, '33.11.11.11')
 
-    zones = get_all_zones()
+    zones = get_all_zones(ConfID, ViewID)
     pprint(zones)
     print(f'Zone: {zone} exists? {is_zone(zone)}')
     exit()
