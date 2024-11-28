@@ -51,10 +51,10 @@ import config
 
 
 # returns an iterator, not the data itself
-def export_entities(start_id):
+def export_entities(start_id, types="Zone,GenericRecord,HostRecord,SRVRecord,TXTRecord,ExternalHostRecord"):
     selection = {
             "selector": "get_entitytree",
-            "types": "Zone,GenericRecord,HostRecord,SRVRecord,TXTRecord,ExternalHostRecord",
+            "types": types,
             "startEntityId": start_id,
             "keyword": "*",
     }
@@ -121,7 +121,8 @@ def get_entities_by_name_using_options(pid, nm, typ):
     return Clnt.get_entities_by_name_using_options(pid, nm, typ)
 
 def get_entity_by_id(pid):
-    return Clnt.get_entity_by_id(pid)
+    ent = Clnt.get_entity_by_id(pid)
+    return ent
 
 def get_entity_by_name(pid, nm, typ):
     return Clnt.get_entity_by_name(pid, nm, typ)
@@ -439,20 +440,55 @@ def dump_dns_data():
         with open(f'{zname}-rrs.json', 'w') as rr_fd:
             json.dump(rrs, rr_fd, indent=4, sort_keys=True)
 
-def main():
+def test():
     init()
+
     print(Clnt.system_version)
     sysinfo = get_system_info()
     pprint(sysinfo)
+
 #   add_A_RR('a.b.c.d', '2.3.4.5')
 #   add_A_RR('aa.b.c.d', '1.2.3.5')
 #   del_A_RR('a.b.c.d', '1.2.3.4')
 #   del_A_RR('a.b.c.d', '2.3.4.5')
 #   dump_dns_data()
-#   export_entities()
 
-    print_leaf_zones()
+    leaves = []
+    pids = []
+    ents = get_entities(2865574, 'GenericRecord')
+    pprint(ents)
+    exit()
+    ents = export_entities(config.ViewId, 'GenericRecord,AliasRecord')
+    for ent in ents:
+        name = ent['name']
+        props = ent['properties']
+        fqdn = props['absoluteName']
+        pid = props['parentId']
+        zone = fqdn[len(name)+1:]
+        if zone not in leaves:
+            leaves.append(zone)
+        if pid not in pids:
+            pids.append(pid)
+    ents = []
+    for pid in pids:
+        ent = get_entity_by_id(pid)
+        ents.append(ent)
+    pprint(leaves)
+    pprint(ents)
+    exit()
+
+    zlist = []
+    zones = export_entities(config.ViewId, 'Zone')
+    for zone in zones:
+        zid = zone['id']
+        ents = get_entities(zid, 'GenericRecord')
+        if len(ents):
+            fqdn = zone['properties']['absoluteName']
+            zlist.append(f'{fqdn},{zid}')
+    pprint(zlist)
+    print(len(zlist))
     Clnt.logout()
+
     exit()
     create_leaf_zones()
     create_test_A_records()
@@ -464,6 +500,9 @@ def main():
         delete_zone(tld)
     print(f'Creating all azure zones')
     create_all_azure_zones()
+
+def main():
+    test()
 
 if __name__ == '__main__':
     main()

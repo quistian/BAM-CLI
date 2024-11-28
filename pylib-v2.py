@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python
 
 # a one liner
 
@@ -78,9 +78,15 @@ from bluecat_libraries.address_manager.apiv2 import Client, MediaType, BAMV2Erro
 
 load_dotenv("/home/russ/.bamrc")
 
+# Some global variables
+
+Debug = False
+Debug = True
+
 Ca_bundle = '/etc/ssl/Sectigo-AAA-chain.pem'
 Verfy = False
 Verfy = Ca_bundle
+
 Header = {"Accept": MediaType.JSON}
 
 EndPoint = os.environ.get('BAM_ENDPOINT')
@@ -88,21 +94,38 @@ Url = f'https://{EndPoint}/api/v2/'
 Uname = os.environ.get('BAM_USER')
 Pw = os.environ.get('BAM_PW')
 
+# Name and IDs of BAM Configuration and View
 Conf = os.environ.get('BAM_CONF')
 View = os.environ.get('BAM_VIEW')
 View_Id = 0
 Conf_Id = 0
 
+# Static cached list of zones and their respective IDs
+# Zones is all zones, starting at the root
+# Leaves are the endpoints of the Zone tree
+# Private are the Zones which correspond to the Azure Resource names
+
+Zones = {}
+Leaves = {}
+Private = {}
+
 # Retrieve the configurations. Request the data as per BAM's default content type.
 
 def init():
     global Clt
+    global Conf_Id, View_Id
 
     Clt = Client(Url, verify=Ca_bundle)
     data = Clt.login(Uname, Pw)
     if Clt.is_authenticated:
-        print(f'BAM auth: {Clt.auth}')
-        print(f'BAM url: {Clt.bam_url}')
+        if Debug:
+            print(f'BAM auth: {Clt.auth}')
+            print(f'BAM url: {Clt.bam_url}')
+        Conf_Id = get_conf_id()
+        View_Id = get_view_id()
+        if Debug:
+            print(f'Conf ID: {Conf_Id}')
+            print(f'View ID: {View_Id}')
     else:
         print(f'Could not authenticate: {data}')
         exit()
@@ -203,29 +226,110 @@ def get_conf_id():
     )
     return resp['data'][0]['id']
 
-def get_tld_zones(vid):
+"""
+Full zone data structure from view collection:
+
+ {'absoluteName': 'ms',
+  'configuration': {'id': 2200891, 'name': 'Test', 'type': 'Configuration'},
+  'deploymentEnabled': False,
+  'dynamicUpdateEnabled': False,
+  'id': 2865098,
+  'name': 'ms',
+  'signed': False,
+  'signingPolicy': None,
+  'template': None,
+  'type': 'Zone',
+  'userDefinedFields': None,
+  'view': {'id': 2734992, 'name': 'Azure', 'type': 'View'}},
+"""
+
+def get_view_zones(vid):
     path = f'/views/{vid}/zones'
+    parms = {
+            'fields': 'absoluteName,id,name,type',
+            'filter': 'type:eq("Zone")',
+    }
     zones = Clt.http_get(
         path,
         headers = Header,
+        params = parms,
         )
     return zones['data']
 
-def get_zone_subzones(zid):
+def get_zone_zones(zid):
     path = f'/zones/{zid}/zones'
-    parms = {'fields': 'embed(resourceRecords.addresses)'}
+    # parms = {'fields': 'embed(resourceRecords.addresses)'}
+    parms = {
+            'fields': 'absoluteName,id',
+            'filter': 'type:eq("Zone")',
+    }
+    zones = Clt.http_get(
+            path,
+            headers = Header,
+            params = parms,
+    )
+    return zones['data']
+
+"""
+
+{
+'id': 3035964,
+'type': 'GenericRecord',
+'name': 'q573_test_646',
+'configuration': {'id': 2200891, 'type': 'Configuration', 'name': 'Test'},
+'ttl': None,
+'absoluteName': 'q573_test_646.573.privatelink.redisenterprise.cache.azure.net',
+'comment': None,
+'dynamic': False,
+'recordType': 'A',
+'rdata': '10.141.144.179',
+'userDefinedFields': None
+}
+
+"""
+
+def get_zone_rrs(zid):
+    path = f'/zones/{zid}/resourceRecords'
+    parms = {
+        'fields': 'id,name,absoluteName,rdata,ttl',
+        'filter': 'type:eq("GenericRecord") and recordType:eq("A")',
+    }
     rrs = Clt.http_get(
             path,
+            headers = Header,
             params = parms,
     )
     return rrs['data']
+
+"""
+Get all zones for a given view and type == Zone
+"""
+
+def get_zones():
+    global Zones
+
+    if len(Zones):
+        return Zones
+    else:
+        path = '/zones'
+        parms = {
+            'fields': 'id,name,absoluteName',
+            'filter': f'type:eq("Zone") and view.id:eq({View_Id})',
+        }
+        resp = Clt.http_get(
+                path,
+                headers = Header,
+                params = parms,
+        )
+        Zones = resp['data']
+        return Zones
 
 def get_rrs():
     path = '/resourceRecords'
     parms = {
         'fields': 'id,name,configuration,ttl,absoluteName,recordType,rdata',
-        'filter': f'configuration.id:eq({Conf_Id})',
-        'limit': 100,
+        'filter': f'configuration.id:eq({Conf_Id}) and absoluteName:contains("privatelink")',
+        'limit': 10000,
         'total': True,
     }
     resp = Clt.http_get(
@@ -234,31 +338,159 @@ def get_rrs():
         params = parms,
     )
     data = resp['data']
-    pprint(data)
     return data
 
+
+"""
+
+Add a zone in fqdn form below the root view
+Returns the ID of the new zone
+
+"""
+
+def add_zone(zone):
+    global Zones
+
+    path = f'/views/{View_Id}/zones'
+    payload = {
+        'type': 'Zone',
+        'absoluteName': zone,
+    }
+    Header['x-bcn-change-control-comment'] = 'Zone Added Python v2 BAM 9.5 API'
+    try:
+        resp = Clt.http_post(
+            path,
+            headers = Header,
+            json = payload,
+        )
+        newzone = dict()
+        for key in ['id', 'name', 'absoluteName']:
+            newzone[key] = resp[key]
+        Zones.append(newzone)
+        return resp['id']
+    except BAMV2ErrorResponse as exc:
+        print(exc.message)
+        return -exc.status
+
+# zone is a dict item with keys: absoluteName, name, id
+def del_zone(zid):
+    path = f'/zones/{zid}'
+    Header['x-bcn-change-control-comment'] = 'Zone Deleted Python v2 BAM 9.5 API'
+    try:
+        resp = Clt.http_delete(
+            path,
+            headers = Header,
+        )
+        if Debug:
+            print(f'Deleting zone associated with id: {zid}')
+    except BAMV2ErrorResponse as exc:
+        print(exc.message)
+        return -exc.status
+
+# Utility functions, based on low level v2 API
+
+# Detail description:
+# https://proteus-dev.its.utoronto.ca/api/docs/?context=AddressManager
+
+def delete_zone(zname):
+    global Zones
+
+    zid = 0
+    for zone in get_zones():
+        if zone['absoluteName'] == zname:
+            zid = zone['id']
+    if zid:
+        del_zone(zid)
+        Zones.remove(zone)
+    else:
+        print(f'No zone named {zname} to delete')
+
+def get_tlds():
+    return get_view_zones(View_Id)
+
+def get_leaf_zones():
+    global Leaves
+
+    if len(Leaves):
+        return Leaves
+    else:
+        zones = get_zones()
+        for zone in zones:
+            if zone['name'].isnumeric():
+                Leaves[zone['absoluteName']] = zone['id']
+        return Leaves
+
+def get_private_zones():
+    global Private
+
+    if len(Private):
+        return Private
+    else:
+        zones = get_zones()
+        for zone in zones:
+            if zone['name'] == 'privatelink':
+                Private[zone['absoluteName']] = zone['id']
+        return Private
+
 def main():
-    global Conf_Id, View_Id
 
     init() #sets Clt
-    Conf_Id = get_conf_id()
-    View_Id = get_view_id()
 
-    print(f'Conf ID: {Conf_Id}')
-    print(f'View ID: {View_Id}')
-    rrs = get_rrs()
+    Z = 'bozo.com'
+
+    delete_zone(Z)
+    add_zone(Z)
     exit()
 
-    zones = get_tld_zones(View_Id)
+    for leaf in get_leaf_zones():
+        print(leaf)
+
+    for priv in get_private_zones():
+        print(priv)
+
+    data = add_zone('a.b.c.com')
+    pprint(data)
+
+    leaves = get_leaf_zones()
+    for leaf in leaves:
+        print(leaf)
+        rrs = get_zone_rrs(leaf['id'])
+        for rr in rrs:
+            print(rr)
+        print()
+    print(len(leaves))
+    exit()
+
+    zones = get_zones()
     for zone in zones:
-        pprint(zone)
+        print(zone)
+    print(len(zones))
+    zones = get_zones()
+    for zone in zones:
+        print(zone)
+    print(len(zones))
+    exit()
+
+    rrs = get_rrs()
+    for rr in rrs:
+        print(rr)
+    print(len(rrs))
+
+    tlds = get_tlds()
+    for tld in tlds:
+        zones = get_zone_zones(tld['id'])
+        print(f"Parent: {tld['name']}")
+        for zone in zones:
+            print(zone)
+        print()
+
 
     for zone in zones:
         if zone['type'] == 'Zone':
             zid = zone['id']
             zname = zone['name']
             print(f'Zone ID Name: {zid} {zname}')
-            data = get_zone_subzones(zid)
+            data = get_zone_zones(zid)
             if len(data):
                 for d in data:
                     pprint(d)

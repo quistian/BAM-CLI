@@ -1,0 +1,41 @@
+-- DROP TABLE IF EXISTS log;
+CREATE TABLE IF NOT EXISTS log (
+    id INTEGER PRIMARY KEY,
+    isodate TEXT NOT NULL,  -- ISO 8601 date format with milliseconds E.g. 2024-11-21T14:21:53+00:00
+    unixtime INTEGER,       -- seconds since the epoch
+    transaction_ids TEXT,   -- JSON representation of the transaction ids which occurred since the last scan
+    changed_zones TEXT      -- CSV representation of changed zones since last scan
+);
+
+-- DROP TABLE IF EXISTS transactions;
+CREATE TABLE IF NOT EXISTS transactions (
+    id INTEGER PRIMARY KEY,
+    act_id INTEGER UNIQUE,
+    datetime TEXT,
+    comment TEXT,
+    description TEXT,
+    operation TEXT,
+    user TEXT
+);
+
+-- DROP TABLE IF EXISTS operations;
+CREATE TABLE IF NOT EXISTS operations (
+    id INTEGER PRIMARY KEY,
+    act_id INTEGER,
+    rr_id INTEGER,
+    op_type TEXT,
+    bc_type TEXT,
+    rr_comment TEXT,
+    rr_hname TEXT,
+    rr_fqdn TEXT,
+    rr_type TEXT,
+    rr_value TEXT,
+    rr_ttl INTEGER
+);
+
+-- DROP TABLE IF EXISTS last_run;
+CREATE TABLE IF NOT EXISTS last_run (
+    id INTEGER PRIMARY KEY,
+    isodate TEXT,
+    unixtime INTEGER
+);
