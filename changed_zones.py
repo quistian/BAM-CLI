@@ -11,14 +11,13 @@ from contextlib import closing
 from datetime import datetime, date, time, timezone, timedelta
 from pprint import pprint
 
-
 Db = 'bc_dns_delta.db'
 Changed_zones = list()
 Transaction_ids = list()
 
 '''
-           cur.execute("INSERT or IGNORE INTO last_run (id, isodate, unixtime) VALUES (1, ?, ?)",  (isodate, unixtime))
-           cur.execute("UPDATE last_run SET isodate = ?, unixtime = ? WHERE id = 1", (isodate, unixtime))
+           cur.execute("INSERT or IGNORE INTO last_run (run_id, run_isodate, run_unixtime) VALUES (1, ?, ?)",  (isodate, unixtime))
+           cur.execute("UPDATE last_run SET run_isodate = ?, run_unixtime = ?  WHERE run_id = 1", (isodate, unixtime))
 '''
 
 def update_last_run():
@@ -29,8 +28,8 @@ def update_last_run():
     with closing(sqlite3.connect(Db)) as con:
         with closing(con.cursor()) as cur:
             sql = '''
-            INSERT into last_run (id, isodate, unixtime) VALUES (?, ?, ?)
-            ON CONFLICT(id) DO UPDATE SET isodate = excluded.isodate, unixtime = excluded.unixtime;
+            INSERT into last_run (run_id, run_isodate, run_unixtime) VALUES (?, ?, ?)
+            ON CONFLICT(run_id) DO UPDATE SET run_isodate = excluded.run_isodate, run_unixtime = excluded.run_unixtime;
             '''
             cur.execute(sql, (idx, isodate, unixtime))
             con.commit()
@@ -48,7 +47,7 @@ def update_log():
     with closing(sqlite3.connect(Db)) as con:
         with closing(con.cursor()) as cur:
             sql = '''
-                INSERT into log (isodate,unixtime,transaction_ids,changed_zones) VALUES (?,?,?,?);
+                INSERT into log (log_isodate,log_unixtime,log_transaction_ids,log_changed_zones) VALUES (?,?,?,?);
             '''
             cur.execute(sql, (isodate,unixtime,tids,zones))
             con.commit()
@@ -71,7 +70,7 @@ def update_transactions(act):
     with closing(sqlite3.connect(Db)) as con:
         with closing(con.cursor()) as cur:
             sql = '''
-            INSERT OR IGNORE INTO transactions (act_id, datetime, description, operation, user)
+            INSERT OR IGNORE INTO transactions (act_id, trans_dt, trans_desc, trans_op, trans_user)
             VALUES (?, ?, ?, ?, ?)
             '''
             cur.execute(sql, (act['id'], act['creationDateTime'],act['description'],act['operation'],act['user']['name']))
@@ -180,7 +179,7 @@ def update_operations(act_id, ops):
 def fetch_last_run():
     with closing(sqlite3.connect(Db)) as con:
         with closing(con.cursor()) as cur:
-            sql = "SELECT isodate from last_run WHERE id = 1"
+            sql = "SELECT run_isodate from last_run WHERE run_id = 1"
             row = cur.execute(sql).fetchone()
             con.commit()
     return row[0]
@@ -220,7 +219,8 @@ def main():
     then = fetch_last_run()
     now = get_isodate_now()
     all_acts = v2api.get_all_transactions(then,now)
-    pprint(all_acts)
+    if Debug:
+        pprint(all_acts)
     tactions = v2api.get_rr_transactions(then, now)
     for action in tactions:
         if Debug:
@@ -235,8 +235,8 @@ def main():
     update_last_run()
     update_log()
     if len(Changed_zones):
+        print('changed_zones')
         print(Changed_zones)
-    exit()
 
 if __name__ == '__main__':
     main()

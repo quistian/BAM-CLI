@@ -8,7 +8,7 @@ import os
 import sys
 
 import re
-from requests import Session
+from requests import Session, exceptions
 import sqlite3
 
 from contextlib import closing
@@ -176,6 +176,7 @@ def basic_auth():
     Sess.headers.update({'Accept': mime_type})
     Sess.headers.update({'User-Agent': f'Generic BC Integrity API v2 Library'})
     Sess.headers.update({'x-bcn-change-control-comment': f'Comments when making changes making a change'})
+    Sess.verify = Ca_bundle
     ConfID = get_conf_id(Conf)
     ViewID = get_view_id(View, ConfID)
     ExHostZoneID = get_exhost_zone_id(ViewID)
@@ -1908,16 +1909,32 @@ def _request(method, path, params=None, json=None):
         print(f'_request: {Sess.headers}')
         print(f'_request: params: {params}')
         print(f'_request: json: {json}')
-    resp = Sess.request(method, url, params=params, json=json, verify=Ca_bundle)
-    if not resp.ok:
-        print(f'_request: return code: {resp.status_code}')
-        print(f'_request: url: {resp.url}')
-        print(f'_request method {resp.request.method}')
-        print(f'_request header {resp.request.headers}')
-        print(f'_request body {resp.request.body}')
-        print(f'_request response: {resp.text}')
-#    resp.raise_for_status()
-    return resp
+#   resp = Sess.request(method, url, params=params, json=json, verify=Ca_bundle)
+    try:
+        resp = Sess.request(method, url, params=params, json=json, timeout=(5, 10))
+        resp.raise_for_status()
+    except exceptions.HTTPError as http_err:
+        print(f'HTTP error status: {http_err}')
+    except exceptions.ConnectionError as conn_err:
+        print(f'Connection error status: {conn_err}')
+    except exceptions.ReadTimeout as read_timeout_err:
+        print(f'Read Timeout error status: {read_timeout_err}')
+    except exceptions.Timeout as timeout_err:
+        print(f'Timeout error status: {timeout_err}')
+    except exceptions.URLRequired as url_err:
+        print(f'Invalid URL error status: {url_err}')
+    except exceptions.RequestException as err:
+        print(f'An error occurred status: {err}')
+    else:
+        if resp.ok:
+            return resp
+        else:
+            print(f'_request: return code: {resp.status_code}')
+            print(f'_request: url: {resp.url}')
+            print(f'_request method {resp.request.method}')
+            print(f'_request header {resp.request.headers}')
+            print(f'_request body {resp.request.body}')
+            print(f'_request response: {resp.text}')
 
 def test(nm,z):
     params = {}
