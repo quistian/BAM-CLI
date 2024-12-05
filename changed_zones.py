@@ -1,9 +1,9 @@
 #!/usr/bin/env python
 
-import getopt
 import json
 import sys
 import sqlite3
+import getopt
 
 import v2api
 
@@ -14,6 +14,8 @@ from pprint import pprint
 Db = 'bc_dns_delta.db'
 Changed_zones = list()
 Transaction_ids = list()
+
+Debug = False
 
 '''
            cur.execute("INSERT or IGNORE INTO last_run (run_id, run_isodate, run_unixtime) VALUES (1, ?, ?)",  (isodate, unixtime))
@@ -191,14 +193,11 @@ def get_isodate_now():
 def main():
     global Debug
 
-    Debug = False
     arglist= sys.argv[1:]
-#options
     opts = 'hdvq'
-# longer options
     long_opts = ['help', 'debug', 'verbose', 'quiet']
     try:
-        args, vals = getopt.getopt(arglist, opts, long_opts)
+        args,vals = getopt.getopt(arglist, opts, long_opts)
         for cur_arg,cur_val in args:
             if cur_arg in ['-h', '--help']:
                 print('This is a holding area for help information')
@@ -216,6 +215,7 @@ def main():
     v2api.Debug = Debug
 
     v2api.basic_auth()
+    v2api.get_system_version()
     then = fetch_last_run()
     now = get_isodate_now()
     all_acts = v2api.get_all_transactions(then,now)

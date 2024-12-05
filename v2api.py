@@ -8,7 +8,7 @@ import os
 import sys
 
 import re
-from requests import Session, exceptions
+from requests import Session, exceptions, auth
 import sqlite3
 
 from contextlib import closing
@@ -67,6 +67,8 @@ Ca_bundle = '/etc/ssl/Sectigo-AAA-chain.pem'
 
 Debug = True
 Debug = False
+Header_Printed = False
+
 Dot = '.'
 CIDRBlock = '10.0.0.0/8'
 ConfID = 0
@@ -74,7 +76,7 @@ ViewID = 0
 ExHostZoneID = 0
 BlockID = 0
 
-Comment = 'Modified by v2API'
+Comment = 'Modifications by v2API'
 
 ViewZones = dict()
 
@@ -150,13 +152,16 @@ Response:
 '''
 
 def basic_auth():
-    global Sess
+    global Sess, Header_Printed
     global ConfID, ViewID, ExHostZoneID, BlockID
     global Auth_header, Header, ViewZones
 
-    Sess = Session()
     if Debug:
         print(f'basic_auth: {Base} {Conf} {View}')
+
+    mime_type = 'application/json'
+    Sess = Session()
+    Sess.headers.update({'Content-Type': mime_type})
     resp = _request(
         'POST', 
         '/sessions',
@@ -167,21 +172,22 @@ def basic_auth():
     )
     data = resp.json()
     if Debug:
-        print('basic_auth: data')
+        print(f'basic_auth: response:')
         pprint(data)
-    mime_type = 'application/json'
     token = data['basicAuthenticationCredentials']
+    Header_Printed = False
+
     Sess.headers.update({'Authorization': f'Basic {token}'})
-    Sess.headers.update({'Content-Type': mime_type})
     Sess.headers.update({'Accept': mime_type})
-    Sess.headers.update({'User-Agent': f'Generic BC Integrity API v2 Library'})
-    Sess.headers.update({'x-bcn-change-control-comment': f'Comments when making changes making a change'})
+    Sess.headers.update({'User-Agent': f'Generic BC Integrity API v2 Python Library'})
+    Sess.headers.update({'x-bcn-change-control-comment': f'{Comment}'})
     Sess.verify = Ca_bundle
+
     ConfID = get_conf_id(Conf)
     ViewID = get_view_id(View, ConfID)
     ExHostZoneID = get_exhost_zone_id(ViewID)
     blocks = get_ipv4_blocks(ConfID)
-    if len(data):
+    if len(blocks):
         BlockID = blocks[0]['id']
     else:
         BlockID = create_block(ConfID, CIDRBlock)
@@ -1901,14 +1907,53 @@ def get_exhost_zone_id(vid):
         print('get_exhost_zone_id: Zone ID: {ex_id}')
     return ex_id
 
+'''
+Output:
+    'count': 1,
+     'data': [{'activeSessions': 6,
+               'address': '10.192.103.151',
+               'hostname': 'proteus-dev',
+               'id': 1,
+               'interfaceRedundancyEnabled': False,
+               'type': 'SystemSettings',
+               'version': '9.5.3-1036.GA.bcn'}]}
+'''
+
+def get_system_info():
+    resp = _request(
+        'GET',
+        path = f'/settings',
+        params = {'filter': "type:eq('SystemSettings')"},
+    )
+    data = resp.json()['data'][0]
+    if Debug:
+        print(f'get_system_info:')
+        pprint(data)
+    return data
+
+
+def get_system_version():
+    info = get_system_info()
+    version = info['version']
+    if Debug:
+        print(f'get_system_version: {version}')
+    return version
+
+
 def _request(method, path, params=None, json=None):
-    global Sess
+    global Sess, Header_Printed
 
     url = f'https://{Base}/api/v2{path}'
     if Debug:
-        print(f'_request: {Sess.headers}')
-        print(f'_request: params: {params}')
-        print(f'_request: json: {json}')
+        if not Header_Printed:
+            print(f'_request: Session Header')
+            [print(f'{key}: {val}') for key,val in Sess.headers.items()]
+            print()
+            Header_Printed = True
+        if params is not None:
+            print(f'_request: params: {params}')
+        if json is not None:
+            print(f'_request: json: {json}')
 #   resp = Sess.request(method, url, params=params, json=json, verify=Ca_bundle)
     try:
         resp = Sess.request(method, url, params=params, json=json, timeout=(5, 10))
