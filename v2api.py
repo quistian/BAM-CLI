@@ -1,23 +1,17 @@
 #!/usr/bin/env python
 
-import csv
-import datetime
 import getopt
-import json
 import os
 import sys
 
 import re
-from requests import Session, exceptions, auth
-import sqlite3
+from requests import Session, exceptions
 
-from contextlib import closing
-from datetime import datetime, date, time, timezone, timedelta
 from dotenv import load_dotenv
 from pprint import pprint
 
 
-'''
+"""
 Library to use the BAM v2 API, which commenced with BAM v9.5
 See:
 
@@ -52,74 +46,74 @@ See:
 
     Authorization: Basic Blah
 
-'''
+"""
 
 load_dotenv("/home/russ/.bamrc")
 
-Base = os.environ.get('BAM_DEV_ENDPT')
-URL = os.environ.get('BAM_DEV_APIv2_URL')
-Uname = os.environ.get('BAM_DEV_USER')
-Pw = os.environ.get('BAM_DEV_PW')
-Conf = os.environ.get('BAM_DEV_CONF')
-View = os.environ.get('BAM_DEV_VIEW')
+Base = os.environ.get("BAM_DEV_ENDPT")
+URL = os.environ.get("BAM_DEV_APIv2_URL")
+Uname = os.environ.get("BAM_DEV_USER")
+Pw = os.environ.get("BAM_DEV_PW")
+Conf = os.environ.get("BAM_DEV_CONF")
+View = os.environ.get("BAM_DEV_VIEW")
 
-Ca_bundle = '/etc/ssl/Sectigo-AAA-chain.pem'
+Ca_bundle = "/etc/ssl/Sectigo-AAA-chain.pem"
 
 Debug = True
 Debug = False
 Header_Printed = False
 
-Dot = '.'
-CIDRBlock = '10.0.0.0/8'
+Dot = "."
+CIDRBlock = "10.0.0.0/8"
 ConfID = 0
 ViewID = 0
 ExHostZoneID = 0
 BlockID = 0
 
-Comment = 'Modifications by v2API'
+Comment = "Modifications by v2API"
 
 ViewZones = dict()
 
 RR_Types = [
-    'AliasRecord',
-    'GenericRecord',
-    'HINFORecord',
-    'HostRecord',
-    'ExternalHostRecord',
-    'ExternalHostsZone',
-    'NAPTRRecord',
-    'SRVRecord',
-    'TXTRecord',
+    "AliasRecord",
+    "GenericRecord",
+    "HINFORecord",
+    "HostRecord",
+    "ExternalHostRecord",
+    "ExternalHostsZone",
+    "NAPTRRecord",
+    "SRVRecord",
+    "TXTRecord",
 ]
 
 Generic_RR_Types = [
-    'A',
-    'AAAA',
-    'DNAME',
-    'SFP',
-    'PTR',
+    "A",
+    "AAAA",
+    "DNAME",
+    "SFP",
+    "PTR",
 ]
 
 Network_Types = [
-  'IPvvBlock',
-  'IPv6Block',
-  'IPv4Network',
-  'IPv6Network',
-  'IPv4Address',
-  'IPv6Address',
+    "IPvvBlock",
+    "IPv6Block",
+    "IPv4Network",
+    "IPv6Network",
+    "IPv4Address",
+    "IPv6Address",
 ]
 
 TTL = 3600
 
 
-Db = 'bc_dns_delta.db'
+Db = "bc_dns_delta.db"
 Changed_zones = list()
 Transaction_ids = list()
 
 
 # Retrieve the configurations. Request the data as per BAM's default content type.
 
-'''
+"""
 Response:
 
 {
@@ -149,7 +143,8 @@ Response:
     }
 }
 
-'''
+"""
+
 
 def basic_auth():
     global Sess, Header_Printed
@@ -157,30 +152,30 @@ def basic_auth():
     global Auth_header, Header, ViewZones
 
     if Debug:
-        print(f'basic_auth: {Base} {Conf} {View}')
+        print(f"basic_auth: {Base} {Conf} {View}")
 
-    mime_type = 'application/json'
+    mime_type = "application/json"
     Sess = Session()
-    Sess.headers.update({'Content-Type': mime_type})
+    Sess.headers.update({"Content-Type": mime_type})
     resp = _request(
-        'POST', 
-        '/sessions',
-        json = {
-            'username': Uname,
-            'password': Pw,
+        "POST",
+        "/sessions",
+        payload={
+            "username": Uname,
+            "password": Pw,
         },
     )
     data = resp.json()
     if Debug:
-        print(f'basic_auth: response:')
+        print("basic_auth: response:")
         pprint(data)
-    token = data['basicAuthenticationCredentials']
+    token = data["basicAuthenticationCredentials"]
     Header_Printed = False
 
-    Sess.headers.update({'Authorization': f'Basic {token}'})
-    Sess.headers.update({'Accept': mime_type})
-    Sess.headers.update({'User-Agent': f'Generic BC Integrity API v2 Python Library'})
-    Sess.headers.update({'x-bcn-change-control-comment': f'{Comment}'})
+    Sess.headers.update({"Authorization": f"Basic {token}"})
+    Sess.headers.update({"Accept": mime_type})
+    Sess.headers.update({"User-Agent": "Generic BC Integrity API v2 Python Library"})
+    Sess.headers.update({"x-bcn-change-control-comment": f"{Comment}"})
     Sess.verify = Ca_bundle
 
     ConfID = get_conf_id(Conf)
@@ -188,13 +183,14 @@ def basic_auth():
     ExHostZoneID = get_exhost_zone_id(ViewID)
     blocks = get_ipv4_blocks(ConfID)
     if len(blocks):
-        BlockID = blocks[0]['id']
+        BlockID = blocks[0]["id"]
     else:
         BlockID = create_block(ConfID, CIDRBlock)
     if Debug:
-        print(f'basic_auth: ConfID: {ConfID}, ViewID: {ViewID} BlockID: {BlockID}')
+        print(f"basic_auth: ConfID: {ConfID}, ViewID: {ViewID} BlockID: {BlockID}")
 
-'''
+
+"""
 Get a list of all Configurations
 To get a subset of fields: params = {'fields': 'id,name,type'}
 
@@ -265,20 +261,18 @@ Return from GET: /configurations
 }
 
 As is returns a list of configurations
-'''
+"""
 
 # params = {'fields': 'id,name,type'}
 
-def get_confs():
-    resp = _request(
-        'GET',
-        '/configurations',
-        params = {'fields': 'name,id,type'}
-    )
-    data = resp.json()
-    return data['data']
 
-'''
+def get_confs():
+    resp = _request("GET", "/configurations", params={"fields": "name,id,type"})
+    data = resp.json()
+    return data["data"]
+
+
+"""
 Data dictionary returned for an individual Configuration:
 
 {'_links': {'accessControlLists': {'href': '/api/v2/configurations/163787/accessControlLists'},
@@ -334,14 +328,16 @@ Data dictionary returned for an individual Configuration:
  'type': 'Configuration',
  'userDefinedFields': None}
 
- '''
+ """
+
 
 def get_conf(cid, params={}):
-    resp = _request('GET', f'/configurations/{cid}', params)
+    resp = _request("GET", f"/configurations/{cid}", params)
     data = resp.json()
     return data
 
-'''
+
+"""
 get_conf_views: Retrieves all Views related to a given configuration
 Returns a dictionary as follows:
 Conf ID: 100905 Views
@@ -398,21 +394,23 @@ data is the list of Views
            ]
 }
 
-'''
+"""
+
 
 def get_conf_views(cid):
     resp = _request(
-        'GET', 
-        path=f'/configurations/{cid}/views',
-        params = {'fields': 'name,id,type'},
+        "GET",
+        path=f"/configurations/{cid}/views",
+        params={"fields": "name,id,type"},
     )
     data = resp.json()
     if Debug:
-        print(f'get_conf_views: data:')
-    views = data['data']
+        print("get_conf_views: data:")
+    views = data["data"]
     return views
 
-'''
+
+"""
 
 {'count': 3,
  'data': [{'_links': {'accessRights': {'href': '/api/v2/views/100917/accessRights'},
@@ -512,17 +510,18 @@ With params: fields -> 'configuration,id,name,type'
            'type': 'View'}]
 }
 
-'''
+"""
 
 #    params = {'fields': 'id,configuration,name,type'}
 
+
 def get_views(params={}):
-    resp = _request('GET', '/views', params=params)
+    resp = _request("GET", "/views", params=params)
     data = resp.json()
-    return data['data']
+    return data["data"]
 
 
-'''
+"""
 get_view output
 
 Retrieve a Single View
@@ -560,14 +559,16 @@ E.g. View: 100917
     }
 }
 
-'''
+"""
+
 
 def get_view(vid, params={}):
-    resp = _request('GET', f'/views/{vid}', params=params)
+    resp = _request("GET", f"/views/{vid}", params=params)
     data = resp.json()
     return data
 
-'''
+
+"""
 get all the Network Blocks for a given Collection/Configuration
 
 long data form:
@@ -670,14 +671,16 @@ long data form:
   'usagePercentage': {'assigned': 0, 'unassigned': 100},
   'userDefinedFields': None}]
 
-'''
+"""
+
 
 def get_collection_blocks(cid, params={}):
-    resp = _request('GET', f'/configurations/{cid}/blocks', params=params)
+    resp = _request("GET", f"/configurations/{cid}/blocks", params=params)
     data = resp.json()
-    return data['data']
+    return data["data"]
 
-'''
+
+"""
 Retrieve Transactions with a creationDateTime greater than '2022-01-10T14:14:45Z' and less than '2022-01-20T14:14:45Z'
 GET http://{Address_Manager_IP}/api/v2/transactions?filter=creationDateTime:ge('2022-01-10T14:14:45Z') and creationDateTime:le('2022-01-20T14:14:45Z')
 
@@ -699,59 +702,58 @@ Returns:
          'id': 108726,
          'name': 'sutherl4',
          'type': 'User'}}
-'''
+"""
+
 
 def get_all_transactions(iso_start, iso_stop):
     resp = _request(
-        'GET',
-        f'/transactions',
-        params = {
-            'fields': 'comment,creationDateTime,description,id,operation,transactionType,type,user',
-            'filter': f"(creationDateTime:ge('{iso_start}') and creationDateTime:le('{iso_stop}'))",
+        "GET",
+        "/transactions",
+        params={
+            "fields": "comment,creationDateTime,description,id,operation,transactionType,type,user",
+            "filter": f"(creationDateTime:ge('{iso_start}') and creationDateTime:le('{iso_stop}'))",
         },
     )
     data = resp.json()
-    actions = data['data']
+    actions = data["data"]
     return actions
+
 
 #        'filter': f"((creationDateTime:ge('{iso_start}') and creationDateTime:le('{iso_stop}')) and (operation:contains('GENERIC') or operation:contains('ALIAS')))",
 #        'filter': f"creationDateTime:ge('{iso_start}') and creationDateTime:le('{iso_stop}') and operation:contains('GENERIC')",
 #        'filter': f"creationDateTime:ge('{iso_start}') and creationDateTime:le('{iso_stop}') and (description:contains('Generic') or description:contains('Alias'))",
 
+
 def get_rr_transactions(iso_start, iso_stop):
-    params = {
-        'fields': 'comment,creationDateTime,description,id,operation,transactionType,type,user',
-        'filter': f"creationDateTime:ge('{iso_start}') and creationDateTime:le('{iso_stop}') and description:contains('Record')",
-    }
-    resp = _request(
-        'GET',
-        f'/transactions',
-        params = params,
-    )
-    data = resp.json()
-    actions = data['data']
+    actions = []
+    limit = 1000
+    offset = 0
+    while True:
+        resp = _request(
+            "GET",
+            "/transactions",
+            params = {
+                "offset": offset,
+                "limit": limit,
+                "fields": "comment,creationDateTime,description,id,operation,transactionType,type,user",
+                "filter": f"creationDateTime:ge('{iso_start}') and creationDateTime:le('{iso_stop}') and description:contains('Record')",
+            },
+        )
+        data = resp.json()
+        cnt = data["count"]
+        if cnt > 0:
+            actions.extend(data["data"])
+        if cnt < limit:
+            break
+        else:
+            offset += limit
     if Debug:
-        print(f'get_rr_transactions: all RR transactions:')
+        print("get_rr_transactions: all RR transactions:")
         pprint(actions)
     return actions
 
-def get_embedded_transasction_operations():
-    tau_now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-    tau_before = fetch_last_run()
-    if Debug:
-        print(f'get_embedded_trans_ops: before: {tau_before} now: {tau_now}')
-    resp = _request(
-        'GET',
-        '/transactions',
-        params = {
-            'fields': 'embed(operations),not(_links,_embedded.operations._links)',
-            'filter': f"(creationDateTime:ge('{tau_before}') and creationDateTime:le('{tau_now}'))",
-        },
-    )
-    data = resp.json()
-    return data['data']
 
-'''
+"""
 
 {'_links': {'collection': {'href': '/api/v2/transactions/62991/operations'},
             'self': {'href': '/api/v2/transactions/62991/operations/1'},
@@ -772,22 +774,24 @@ def get_embedded_transasction_operations():
  'resourceType': 'GenericRecord',
  'type': 'Operation'}
 
-'''
+"""
+
 
 def get_transactions_operations(tid):
     resp = _request(
-        'GET',
-        f'/transactions/{tid}/operations',
-        params = {'fields': 'fieldUpdates,operationType,resourceType,resourceId'},
-        )
+        "GET",
+        f"/transactions/{tid}/operations",
+        params={"fields": "fieldUpdates,operationType,resourceType,resourceId"},
+    )
     data = resp.json()
-    ops = data['data']
+    ops = data["data"]
     if Debug:
-        print('get_trans_ops: Combined trans and ops')
+        print("get_trans_ops: Combined trans and ops")
         pprint(ops)
     return ops
 
-'''
+
+"""
 Create a CIDR Block for a given Configuration and return its ID
 full data: {
     'id': 163886,
@@ -832,63 +836,71 @@ full data: {
         'userDefinedLinks': {'href': '/api/v2/blocks/163886/userDefinedLinks'}
         }
 }
-'''
+"""
+
 
 def create_block(cid, cidr):
     resp = _request(
-        'POST',
-        f'/configurations/{cid}/blocks',
-        json = {
-            'type': 'IPv4Block',
-            'range': cidr,
-            'comment': Comment,
+        "POST",
+        f"/configurations/{cid}/blocks",
+        json={
+            "type": "IPv4Block",
+            "range": cidr,
+            "comment": Comment,
         },
     )
     data = resp.json()
-    return data['id']
+    return data["id"]
 
-'''
+
+"""
 Get the main Block IDs associated with a Configuration
 
-'''
+"""
+
 
 def get_ipv4_blocks(cid):
     resp = _request(
-        'GET',
-        path=f'/configurations/{cid}/blocks',
-        params = { 'fields': 'id', 'filter': "type:eq('IPv4Block')" },
+        "GET",
+        path=f"/configurations/{cid}/blocks",
+        params={"fields": "id", "filter": "type:eq('IPv4Block')"},
     )
     data = resp.json()
-    blocks = data['data']
+    blocks = data["data"]
     return blocks
+
 
 def get_ipv4_block_id(cid):
     blocks = get_ipv4_blocks(cid)
-    blk_id = blocks[0]['id']
+    blk_id = blocks[0]["id"]
     return blk_id
 
-'''
+
+"""
 delete Network Block by its ID
-'''
+"""
+
 
 def delete_block(blkid):
     resp = _request(
-        'DELETE',
-        f'/blocks/{blkid}',
+        "DELETE",
+        f"/blocks/{blkid}",
     )
     data = resp.json()
     return data
 
+
 def get_collection_networks(cid, params={}):
     resp = _request(
-        'GET',
-        f'/blocks/{cid}/networks',
+        "GET",
+        f"/blocks/{cid}/networks",
         params=params,
     )
     data = resp.json()
-    return data['data']
+    return data["data"]
 
-'''
+
+"""
 
 returns a list of dictionaries of networks
 [
@@ -896,58 +908,61 @@ returns a list of dictionaries of networks
     {'id': 163890, 'range': '10.141.1.0/24'}
 ]
 
-'''
+"""
+
+
 def get_ipv4_networks(blkid):
-    params = {
-        'fields': 'range,id',
-        'filter': "type:eq('IPv4Network')"
-    }
+    params = {"fields": "range,id", "filter": "type:eq('IPv4Network')"}
     return get_collection_networks(blkid, params=params)
 
-'''
+
+"""
 
 Create a new Network and return its ID
 
-'''
+"""
+
 
 def create_ipv4_network(blkid, cidr):
     resp = _request(
-        'POST',
-        f'/blocks/{blkid}/networks',
-        json = {
-            'type': 'IPv4Network',
-            'range': cidr,
-            'defaultView': {
-                'id': ViewID,
-                'type': 'View',
-                'name': 'default'
-            },
-            'comment': Comment,
+        "POST",
+        f"/blocks/{blkid}/networks",
+        json={
+            "type": "IPv4Network",
+            "range": cidr,
+            "defaultView": {"id": ViewID, "type": "View", "name": "default"},
+            "comment": Comment,
         },
     )
     data = resp.json()
-    return data['id']
+    return data["id"]
+
 
 def delete_network_by_id(netid):
     if Debug:
-        print(f'delete_network_by_id: deleted network id: {netid}')
+        print(f"delete_network_by_id: deleted network id: {netid}")
     resp = _request(
-            'DELETE',
-            f'/networks/{netid}',
+        "DELETE",
+        f"/networks/{netid}",
     )
+    return resp.text
 
-'''
+
+"""
 deletes a network by its CIDR block gracefully.
 does nothing if it does not exist
-'''
+"""
+
 
 def delete_network(cidr):
     if netid := is_ipv4_network(cidr):
         delete_network_by_id(netid)
 
-'''
+
+"""
 Adds a network gracefully. If it's already there nothing happens
-'''
+"""
+
 
 def add_ipv4_network(cidr):
     if not is_ipv4_network(cidr):
@@ -955,31 +970,35 @@ def add_ipv4_network(cidr):
     else:
         return False
 
+
 def is_ipv4_network(cidr):
     nets = get_ipv4_networks(BlockID)
     for net in nets:
-        if net['range'] == cidr:
-            return net['id']
+        if net["range"] == cidr:
+            return net["id"]
     return False
 
-'''
+
+"""
 Get a list of IP addresses corresponding to a given Hostname RR
 returns a list of them
-'''
+"""
+
 
 def get_addresses_by_hostname_id(hostid):
     addrs = list()
     resp = _request(
-        'GET',
-        f'/resourceRecords/{hostid}/addresses',
-        params = {'fields': 'address'},
+        "GET",
+        f"/resourceRecords/{hostid}/addresses",
+        params={"fields": "address"},
     )
     data = resp.json()
-    for add_dict in data['data']:
-        addrs.append(add_dict['address'])
+    for add_dict in data["data"]:
+        addrs.append(add_dict["address"])
     return addrs
 
-'''
+
+"""
 
 get_zones: Retrieve information about _all_ zones from all Configurations and Views
 
@@ -1049,34 +1068,30 @@ Zone from Zone list
             'moves': {'href': '/api/v2/zones/100920/moves'},
             ....
 
-'''
+"""
+
 
 def get_zones(params={}):
-    resp = _request(
-        'GET',
-        '/zones',
-        params=params
-    )
+    resp = _request("GET", "/zones", params=params)
     data = resp.json()
     if Debug:
-        if 'totalCount' in data:
+        if "totalCount" in data:
             print(f'totalCount: {data["totalCount"]}')
-    return data['data']
+    return data["data"]
 
-'''
+
+"""
 def get_zone_zones:  Retrieve all Zones under a given zone
-'''
+"""
+
 
 def get_zone_info(zid, params={}):
-    resp = _request(
-        'GET',
-        f'/zones/{zid}',
-        params=params
-    )
+    resp = _request("GET", f"/zones/{zid}", params=params)
     data = resp.json()
     return data
 
-'''
+
+"""
 get_conf_zones:  Retrieve all Zones under a give Configuration
 Returns a list of Zones, one level below the View i.e. TLDS
 
@@ -1139,52 +1154,57 @@ Returns a list of Zones, one level below the View i.e. TLDS
              'deploymentOptions': {'href': '/api/v2/zones/163806/deploymentOptions'},
              'deploymentRoles': {'href': '/api/v2/zones/163806/deploymentRoles'},
 
-'''
+"""
+
 
 def get_collection_zones(colid, params={}):
     if colid == ViewID:
-        collection = 'views'
+        collection = "views"
     else:
-        collection = 'zones'
+        collection = "zones"
     resp = _request(
-        'GET',
-        '/{collection}/{colid}/zones',
+        "GET",
+        f"/{collection}/{colid}/zones",
         params=params,
     )
     data = resp.json()
     if Debug:
-        print(f'get_collection_zones: data:')
+        print("get_collection_zones: data:")
         pprint(data)
-    return data['data']
+    return data["data"]
 
-'''
+
+"""
 Create a Zone from the root (View ID)
 towards the leaf end point
-'''
+"""
+
 
 def create_zone(zone):
     pzid = ViewID
-    community = 'views'
+    community = "views"
     resp = _request(
-        'POST',
-        f'/{community}/{pzid}/zones',
-        json = {
-            'type': 'Zone',
-            'absoluteName': zone,
-            'comment': Comment,
+        "POST",
+        f"/{community}/{pzid}/zones",
+        json={
+            "type": "Zone",
+            "absoluteName": zone,
+            "comment": Comment,
         },
     )
     if resp.ok:
         data = resp.json()
-        return data['id']
+        return data["id"]
     else:
         return False
 
-'''
+
+"""
 Creates a Zone using recursion
 Checking first to see if it exists
 Needs to change at the root to use views rather than zones as the collection
-'''
+"""
+
 
 def create_zone_recursively(zone):
     global ViewZones
@@ -1193,58 +1213,61 @@ def create_zone_recursively(zone):
         return zid
     else:
         (zname, subzone, subzid) = decouple(zone)
-        pzid = create_zone_recursvely(subzone)
-        community = 'zones'
+        pzid = create_zone_recursively(subzone)
+        community = "zones"
         resp = _request(
-            'POST',
-            f'/{community}/{pzid}/zones',
-            json = {
-                'type': 'Zone',
-                'name': zname,
-                'comment': Comment,
+            "POST",
+            f"/{community}/{pzid}/zones",
+            json={
+                "type": "Zone",
+                "name": zname,
+                "comment": Comment,
             },
         )
         if resp.ok:
             data = resp.json()
-            zid = data['id']
+            zid = data["id"]
             if Debug:
-                print(f'new zone: {zone} with ID {zid} has been created')
+                print(f"new zone: {zone} with ID {zid} has been created")
                 pprint(data)
             ViewZones[zone] = zid
             return zid
         else:
-            print(f'There was a problem creating subzone: {zone}')
+            print(f"There was a problem creating subzone: {zone}")
             return False
 
-'''
+
+"""
 
 Deletes a Zone if it exists
 
-'''
+"""
+
 
 def delete_zone(zone):
     global ViewZones
     zid = is_zone(zone)
     if zid:
         resp = _request(
-            'DELETE',
-            f'/zones/{zid}',
+            "DELETE",
+            f"/zones/{zid}",
         )
         if resp.status_code == 204:
             if Debug:
-                print(f'delete_zone: Zone: {zone} has been deleted')
+                print(f"delete_zone: Zone: {zone} has been deleted")
             del ViewZones[zone]
             return True
         else:
             data = resp.json()
-            print(f'delete_zone: There was a problem deleting Zone: {zone}')
+            print(f"delete_zone: There was a problem deleting Zone: {zone}")
             pprint(data)
             return False
     else:
-        print(f'delete_zone: Zone: {zone} does not exist')
+        print(f"delete_zone: Zone: {zone} does not exist")
         return False
 
-'''
+
+"""
 get_rrs: Retrieve all RRs
 Returns a list of ALL RRs under all Configurations
 
@@ -1271,68 +1294,79 @@ Returns a list of ALL RRs under all Configurations
   'userDefinedFields': None},
  {'_links': {'accessRights': {'href': '/api/v2/resourceRecords/100923/accessRights'},
 
-'''
+"""
+
 
 def get_rrs(cid=ConfID):
     resp = _request(
-        'GET',
-        f'/resourceRecords',
-        params = {'filter':  f'configuration.id:eq({cid})',}
+        "GET",
+        "/resourceRecords",
+        params={
+            "filter": f"configuration.id:eq({cid})",
+        },
     )
     rrs = resp.json()
     return rrs
 
-'''
+
+"""
 
 Get _all_ Resource Records for a specific zone iD
 
-'''
+"""
+
 
 def get_zone_rrs(zid, params={}):
     resp = _request(
-        'GET',
-        f'/zones/{zid}/resourceRecords',
+        "GET",
+        f"/zones/{zid}/resourceRecords",
         params=params,
     )
     data = resp.json()
-    return data['data']
+    return data["data"]
 
-'''
+
+"""
 Get RRs for specific zone ID and BlueCat RR type
-'''
+"""
+
 
 def get_zone_rrs_by_type(zid, rr_type, params={}):
     if Debug:
-        print(f'get_zone_rrs_by_type: RRs for ZoneID {zid} of type {rr_type}')
+        print(f"get_zone_rrs_by_type: RRs for ZoneID {zid} of type {rr_type}")
     if rr_type in RR_Types:
-        params['filter'] = f"type:eq('{rr_type}')"
+        params["filter"] = f"type:eq('{rr_type}')"
     elif rr_type in Generic_RR_Types:
-        params['filter'] = f"type:eq('GenericRecord') and recordType:eq('{rr_type}')"
+        params["filter"] = f"type:eq('GenericRecord') and recordType:eq('{rr_type}')"
     return get_zone_rrs(zid, params)
 
+
 def get_zone_generic_rrs(zid):
-    return get_zone_rrs_by_type(zid, 'GenericRecord')
+    return get_zone_rrs_by_type(zid, "GenericRecord")
+
 
 def get_zone_A_rrs(zid):
     params = {
-            'fields': 'absoluteName,rdata',
-            'filter': "type:eq('GenericRecord') and recordType:eq('A')",
+        "fields": "absoluteName,rdata",
+        "filter": "type:eq('GenericRecord') and recordType:eq('A')",
     }
     return get_zone_rrs(zid, params=params)
 
+
 def get_zone_cname_rrs(zid):
-    return get_zone_rrs_by_type(zid, 'AliasRecord')
+    return get_zone_rrs_by_type(zid, "AliasRecord")
+
 
 def get_zone_hostname_rrs(zid):
     hname_list = list()
     params = {
-            'fields': 'absoluteName,id',
-            'filter': "type:eq('HostRecord')",
+        "fields": "absoluteName,id",
+        "filter": "type:eq('HostRecord')",
     }
     rrs = get_zone_rrs(zid, params=params)
     for rr in rrs:
-        addrs = get_addresses_by_hostname_id(rr['id'])
-        rr['ipaddr'] = addrs
+        addrs = get_addresses_by_hostname_id(rr["id"])
+        rr["ipaddr"] = addrs
         hname_list.append(rr)
     return hname_list
 
@@ -1340,10 +1374,11 @@ def get_zone_hostname_rrs(zid):
 def get_all_A_rrs(zid):
     rr_dict = dict()
     for rr in get_zone_A_rrs(zid):
-        rr_dict[rr['absoluteName']] = rr['rdata']
+        rr_dict[rr["absoluteName"]] = rr["rdata"]
     for rr in get_zone_hostname_rrs(zid):
-        rr_dict[rr['absoluteName']] = rr['ipaddr'][0]
+        rr_dict[rr["absoluteName"]] = rr["ipaddr"][0]
     return rr_dict
+
 
 def get_hostname_addresses(fqdn):
     addrs = []
@@ -1351,34 +1386,39 @@ def get_hostname_addresses(fqdn):
     if zid:
         rrs = get_zone_hostname_rrs(zid)
         for rr in rrs:
-            if rr['name'] == hname:
-                addrs = get_addresses_by_hostname_id(rr['id'])
+            if rr["name"] == hname:
+                addrs = get_addresses_by_hostname_id(rr["id"])
     return addrs
+
 
 def get_collection_rrs(cid, params={}):
     resp = _request(
-        'GET',
-        f'/deployments/{cid}/addedRecords',
+        "GET",
+        f"/deployments/{cid}/addedRecords",
         params=params,
     )
     rrs = resp.json()
     return rrs
 
+
 # Non API Functions below this line
+
 
 def get_conf_rrs(cid, params={}):
     rrs = list()
     allrrs = get_rrs(params)
     for rr in allrrs:
-        rr_conf_id = rr['configuration']['id']
+        rr_conf_id = rr["configuration"]["id"]
         print(rr_conf_id)
     return rrs
 
-'''
+
+"""
 
 External Host are needed to create Alias/CNAME records
 
-'''
+"""
+
 
 def create_ex_host(fqdn):
     exid = is_ex_host(fqdn)
@@ -1386,35 +1426,39 @@ def create_ex_host(fqdn):
         return exid
     else:
         resp = _request(
-            'POST',
-            f'/zones/{ExHostZoneID}/resourceRecords',
-            json = {
-                'name': fqdn,
-                'type': 'ExternalHostRecord',
-                'comment': Comment,
+            "POST",
+            f"/zones/{ExHostZoneID}/resourceRecords",
+            json={
+                "name": fqdn,
+                "type": "ExternalHostRecord",
+                "comment": Comment,
             },
         )
         data = resp.json()
-        return data['id']
+        return data["id"]
 
-'''
+
+"""
 
 returns a dictionary of externalhosts and their IDs
 
-'''
+"""
+
 
 def get_ex_hosts():
     exhosts = dict()
     rrs = get_zone_rrs(ExHostZoneID)
     for rr in rrs:
-        exhosts[rr['name']] = rr['id']
+        exhosts[rr["name"]] = rr["id"]
     return exhosts
 
-'''
+
+"""
 Check to see if an External Host already exists
 If it does return its ID
 
-'''
+"""
+
 
 def is_ex_host(fqdn):
     hosts = get_ex_hosts()
@@ -1423,12 +1467,14 @@ def is_ex_host(fqdn):
     else:
         return False
 
-'''
+
+"""
 
 Creates RRs of all sorts
 based on their respective schemas
 
-'''
+"""
+
 
 def create_rr(fqdn, RR_type, value):
     (name, zone, zid) = decouple(fqdn)
@@ -1436,74 +1482,70 @@ def create_rr(fqdn, RR_type, value):
         zid = create_zone(zone)  # this will create the zone if not already there
 
     payload = {
-        'name': name,
-        'type': RR_type,
-        'ttl': TTL,
-        'comment': Comment,
+        "name": name,
+        "type": RR_type,
+        "ttl": TTL,
+        "comment": Comment,
     }
 
-    if RR_type == 'GenericRecord':
-        (rr_type, rdata) = value.split('~')
-        payload['recordType'] = rr_type
-        payload['rdata'] = rdata
+    if RR_type == "GenericRecord":
+        (rr_type, rdata) = value.split("~")
+        payload["recordType"] = rr_type
+        payload["rdata"] = rdata
 
-    elif RR_type == 'HINFORecord':
-        (os, cpu) = value.split('~')
-        payload['os'] = os
-        payload['cpu'] = cpu
+    elif RR_type == "HINFORecord":
+        (os, cpu) = value.split("~")
+        payload["os"] = os
+        payload["cpu"] = cpu
 
-    elif RR_type == 'HostRecord':
+    elif RR_type == "HostRecord":
         toks = value.split(Dot)
-        toks[3] = '0'
+        toks[3] = "0"
         network = Dot.join(toks)
-        cidr = f'{network}/24'
+        cidr = f"{network}/24"
         add_ipv4_network(cidr)
-        payload['reverseRecord'] = False
-        payload['addresses'] = [
-            {
-                'type': 'IPv4Address',
-                'address': value
-            }
-        ]
+        payload["reverseRecord"] = False
+        payload["addresses"] = [{"type": "IPv4Address", "address": value}]
 
-    elif RR_type == 'TXTRecord':
-        payload['text'] = value
+    elif RR_type == "TXTRecord":
+        payload["text"] = value
 
-# Indirection cases
-    elif RR_type == 'AliasRecord':
+    # Indirection cases
+    elif RR_type == "AliasRecord":
         ex_host_id = create_ex_host(value)
-        payload['linkedRecord'] = {
-            'id': ex_host_id,
-            'type': 'ExternalHostRecord',
+        payload["linkedRecord"] = {
+            "id": ex_host_id,
+            "type": "ExternalHostRecord",
         }
 
-    elif RR_type == 'MXRecord':
+    elif RR_type == "MXRecord":
         mx_host_id = create_ex_host(value)
         if mx_host_id := is_Host_rr(value):
-            payload['linkedRecord'] = {
-                'id': mx_host_id,
-                'type': 'ExternalHostRecord',
+            payload["linkedRecord"] = {
+                "id": mx_host_id,
+                "type": "ExternalHostRecord",
             }
 
-# Create the RR via https
+    # Create the RR via https
     resp = _request(
-        'POST',
-        f'/zones/{zid}/resourceRecords',
+        "POST",
+        f"/zones/{zid}/resourceRecords",
         json=payload,
     )
 
     if resp.ok:
         data = resp.json()
-        print(f'A {RR_type} of value {value} for {fqdn} was created')
+        print(f"A {RR_type} of value {value} for {fqdn} was created")
         if Debug:
             pprint(data)
-        return data['id']
+        return data["id"]
     else:
-        print(f'There was an error creating RR for {fqdn} of type: {RR_type}')
+        print(f"There was an error creating RR for {fqdn} of type: {RR_type}")
         pprint(resp.text)
         return False
 
-'''
+
+"""
 
 A HostRecord of value 10.141.5.5 for hrec2.c.b.a.com was created
 
@@ -1533,53 +1575,65 @@ A HostRecord of value 10.141.5.5 for hrec2.c.b.a.com was created
      'userDefinedFields': None
  }
 
-'''
+"""
+
+
 # RRs with a level in Indirection
 def create_alias_rr(fqdn, exhost):
-    return create_rr(fqdn, 'AliasRecord', exhost)
+    return create_rr(fqdn, "AliasRecord", exhost)
+
 
 def create_mx_rr(fqdn, mxhost):
-    return create_rr(fqdn, 'MXRecord', mxhost)
+    return create_rr(fqdn, "MXRecord", mxhost)
 
 
 # Regular RRs
 
+
 def create_hostrecord(fqdn, ipaddr):
-    return create_rr(fqdn, 'HostRecord', ipaddr)
+    return create_rr(fqdn, "HostRecord", ipaddr)
+
 
 def create_generic_rr(fqdn, rr_type, value):
-    return create_rr(fqdn, 'GenericRecord', f'{rr_type}~{value}')
+    return create_rr(fqdn, "GenericRecord", f"{rr_type}~{value}")
+
 
 def create_txt_rr(fqdn, rr_type, value):
-    return create_rr(fqdn, 'TXTRecord', txt_str)
+    return create_rr(fqdn, "TXTRecord", value)
 
-'''
+
+"""
 
 Graceful Representations of the above creation rr routines
 add_ rather than create_
 
-'''
+"""
+
 
 def add_CNAME_rr(fqdn, exhost):
     if not is_CNAME_rr(fqdn):
         return create_alias_rr(fqdn, exhost)
 
-'''
+
+"""
 Add an Generic A record gracefully
 Will create the subzone if it is not already there
-'''
+"""
+
 
 def add_A_rr(fqdn, value):
     if not is_A_rr(fqdn, value):
-        return create_generic_rr(fqdn, 'A', value)
+        return create_generic_rr(fqdn, "A", value)
     else:
         return False
 
+
 def add_TXT_rr(fqdn, text):
     if not is_TXT_rr(fqdn, text):
-        return create_rr(fqdn, 'TXTRecord', text)
+        return create_rr(fqdn, "TXTRecord", text)
     else:
         return False
+
 
 def add_Host_rr(fqdn, value):
     if not is_Host_rr(fqdn):
@@ -1587,106 +1641,131 @@ def add_Host_rr(fqdn, value):
     else:
         return False
 
+
 def is_generic_rr(fqdn, RR_type, value):
     (hname, zone, zid) = decouple(fqdn)
     if zid:
         rrs = get_generic_rrs(zid)
         for rr in rrs:
-            if rr['hname'] == name and  rr['recordType'] == RR_type and rr['rdata'] == value:
+            if (
+                rr["hname"] == hname
+                and rr["recordType"] == RR_type
+                and rr["rdata"] == value
+            ):
                 if Debug:
-                    print(f'Found a matching RR for {fqdn} of type: {RR_type} with value {value}')
-                return rr['id']
+                    print(
+                        f"Found a matching RR for {fqdn} of type: {RR_type} with value {value}"
+                    )
+                return rr["id"]
         if Debug:
-            print(f'No  matching RRs for {fqdn} of type {RR_type} and value {value}')
+            print(f"No  matching RRs for {fqdn} of type {RR_type} and value {value}")
         return False
     else:
         if Debug:
-            print(f'Subzone: {zone} does not exist for the Generic Record with hostname {fqdn}')
+            print(
+                f"Subzone: {zone} does not exist for the Generic Record with hostname {fqdn}"
+            )
         return False
+
 
 def is_CNAME_rr(fqdn):
     (nm, zone, zid) = decouple(fqdn)
     rrs = get_zone_cname_rrs(zid)
     for rr in rrs:
-        if rr['name'] == nm:
-            return rr['linkedRecord']['absoluteName']
+        if rr["name"] == nm:
+            return rr["linkedRecord"]["absoluteName"]
     if Debug:
-        print(f'No corresponding CNAME record for {fqdn}')
+        print(f"No corresponding CNAME record for {fqdn}")
     return False
+
 
 def is_TXT_rr(fqdn, value):
     (hname, zone, zid) = decouple(fqdn)
     if zid:
-        rrs = get_zone_rrs_by_type(zid, 'TXTRecord')
+        rrs = get_zone_rrs_by_type(zid, "TXTRecord")
         for rr in rrs:
-            if rr['name'] == hname and rr['text'] == value:
-                return rr['id']
+            if rr["name"] == hname and rr["text"] == value:
+                return rr["id"]
         if Debug:
-            print(f'No TXT RRs were found corresponding to {fqdn} and {value}')
+            print(f"No TXT RRs were found corresponding to {fqdn} and {value}")
         return False
     else:
         if Debug:
-            print(f'There is no zone {zone} corresponding to the TXT record for hostname {fqdn}')
+            print(
+                f"There is no zone {zone} corresponding to the TXT record for hostname {fqdn}"
+            )
         return False
+
 
 def is_A_rr(fqdn, value):
     (hname, zone, zid) = decouple(fqdn)
     if zid:
-        rrs = get_zone_rrs_by_type('A')
+        rrs = get_zone_rrs_by_type("A")
         for rr in rrs:
-            if rr['name'] == hname and rr['rdata'] == value:
-                return rr['id']
+            if rr["name"] == hname and rr["rdata"] == value:
+                return rr["id"]
         if Debug:
-            print(f'No A RRs were found corresponding to {fqdn} and {value}')
+            print(f"No A RRs were found corresponding to {fqdn} and {value}")
         return False
     else:
         if Debug:
-            print(f'There is no zone {zone} corresponding to the A record for hostname {fqdn}')
+            print(
+                f"There is no zone {zone} corresponding to the A record for hostname {fqdn}"
+            )
         return False
 
-def is_Host_rr(fqdn, value='10.141.0.0'):
+
+def is_Host_rr(fqdn, value="10.141.0.0"):
     (hname, zone, zid) = decouple(fqdn)
     if zid:
         rrs = get_zone_hostname_rrs(zid)
         for rr in rrs:
-            if rr['name'] == hname:
-                return rr['id']
+            if rr["name"] == hname:
+                return rr["id"]
         if Debug:
-            print(f'No Hostname A RRs were found corresponding to {fqdn}')
+            print(f"No Hostname A RRs were found corresponding to {fqdn}")
         return False
     else:
         if Debug:
-            print(f'There is no zone {zone} corresponding to any Host records for the hostname {fqdn}')
+            print(
+                f"There is no zone {zone} corresponding to any Host records for the hostname {fqdn}"
+            )
         return False
+
 
 def delete_generic_rr(fqdn, RR_type, value):
     rr_id = is_generic_rr(fqdn, RR_type, value)
     if rr_id:
         delete_rr_by_id(rr_id)
         if Debug:
-            print(f'Generic record for {fqdn} of type {RR_type} and value {value} is deleted')
+            print(
+                f"Generic record for {fqdn} of type {RR_type} and value {value} is deleted"
+            )
     else:
-        print(f'There is no Generic Record corresponding to {fqdn}')
+        print(f"There is no Generic Record corresponding to {fqdn}")
+
 
 def delete_rr_by_id(rr_id):
     resp = _request(
-        'DELETE',
-        f'/resourceRecords/{rr_id}',
+        "DELETE",
+        f"/resourceRecords/{rr_id}",
     )
     if not resp.ok:
-        print(f'Error in deleting: {fqdn}')
+        print(f"Error in deleting: rr with id: {rr_id}")
+
 
 def delete_TXT_rr(fqdn, txt):
     (hname, zone, zid) = decouple(fqdn)
     if rr_id := is_TXT_rr(fqdn, txt):
         delete_rr_by_id(rr_id)
         if Debug:
-            print(f'TXT RR {fqdn} with value {txt} deleted')
+            print(f"TXT RR {fqdn} with value {txt} deleted")
         return True
     else:
         if Debug:
-            print(f'No TXT RR {fqdn} with value {txt} to delete')
+            print(f"No TXT RR {fqdn} with value {txt} to delete")
         return False
+
 
 def delete_A_rr(fqdn, value):
     (hname, zone, zid) = decouple(fqdn)
@@ -1695,60 +1774,71 @@ def delete_A_rr(fqdn, value):
             delete_rr_by_id(rr_id)
         else:
             if Debug:
-                print(f'There was no A record with value {value} corresponding to {fqdn}')
+                print(
+                    f"There was no A record with value {value} corresponding to {fqdn}"
+                )
             return rr_id
     else:
         if Debug:
-            print(f'{fqdn} was not deleted as {zone} does not yet exist')
+            print(f"{fqdn} was not deleted as {zone} does not yet exist")
         return False
 
-'''
+
+"""
 
 Updates a Generic RR if it exists and returns the new RR
 Calls get_generic first. There may be more than one match
 
-'''
+"""
+
 
 def update_generic_rr(fqdn, RR_type, new_value):
     rrs = get_generic_rrs(fqdn, RR_type)
     if isinstance(rrs, list):
         rr = rrs[0]
-        old_rdata = rr['rdata']
+        old_rdata = rr["rdata"]
         if new_value == old_rdata:
-            print(f'The Generic RR {fqdn} of type {RR_type} does not need updating as it already has the value {new_value}')
+            print(
+                f"The Generic RR {fqdn} of type {RR_type} does not need updating as it already has the value {new_value}"
+            )
             return False
         if len(rrs) > 1:
-            print(f'There are more than one RR with name {fqdn} and type {RR_type}')
-            print(f'The one with value {old_rdata} will be updated to the new value {new_value}')
-        rr['rdata'] = new_value
-        if 'comment' not in rr:
-            rr['comment'] = Comment
+            print(f"There are more than one RR with name {fqdn} and type {RR_type}")
+            print(
+                f"The one with value {old_rdata} will be updated to the new value {new_value}"
+            )
+        rr["rdata"] = new_value
+        if "comment" not in rr:
+            rr["comment"] = Comment
         resp = _request(
-            'PUT',
+            "PUT",
             f'/resourceRecords/{rr["id"]}',
-            json = rr,
+            json=rr,
         )
         data = resp.json()
         if resp.ok:
             if Debug:
-                print(f'{fqdn} has been updated to value {new_value}')
+                print(f"{fqdn} has been updated to value {new_value}")
                 pprint(data)
             return data
         else:
-            print(f'{fqdn} could not be updated')
+            print(f"{fqdn} could not be updated")
             return False
     else:
-        print(f'There is no RR of type {RR_type} to update')
+        print(f"There is no RR of type {RR_type} to update")
         return False
 
-def update_A_rr(fqdn, new_value):
-    return update_generic_rr(fqdn, 'A', new_value)
 
-'''
+def update_A_rr(fqdn, new_value):
+    return update_generic_rr(fqdn, "A", new_value)
+
+
+"""
 
 Get all Generic Records matching a fqdn and RR type
 
-'''
+"""
+
 
 def get_generic_rrs(fqdn, RR_type):
     (name, zone, zid) = decouple(fqdn)
@@ -1756,81 +1846,94 @@ def get_generic_rrs(fqdn, RR_type):
         matched = list()
         rrs = get_zone_rrs(zid)
         for rr in rrs:
-            if rr['name'] == name and rr['type'] == 'GenericRecord' and rr['recordType'] == RR_type:
+            if (
+                rr["name"] == name
+                and rr["type"] == "GenericRecord"
+                and rr["recordType"] == RR_type
+            ):
                 matched.append(rr)
         if len(matched):
             return matched
         else:
-            print(f'There are no RRs with name {fqdn} and type {RR_type} in zone {zone}')
+            print(
+                f"There are no RRs with name {fqdn} and type {RR_type} in zone {zone}"
+            )
             return False
     else:
-        print(f'No RR with name {fqdn} as zone {zone} does not exist')
+        print(f"No RR with name {fqdn} as zone {zone} does not exist")
         return False
 
+
 def get_conf_id(cf_name):
-    cid = 0
     confs = get_confs()
     for conf in confs:
-        if conf['name'] == cf_name:
-            conf_id = conf['id']
+        if conf["name"] == cf_name:
+            conf_id = conf["id"]
             break
     if Debug:
-        print(f'get_conf_id: Conf ID: {conf_id}')
+        print(f"get_conf_id: Conf ID: {conf_id}")
     return conf_id
+
 
 def get_view_id(vname, cid):
     vid = 0
     views = get_conf_views(cid)
     for view in views:
-        if view['name'] == vname and view['type'] == 'View':
-            vid = view['id']
+        if view["name"] == vname and view["type"] == "View":
+            vid = view["id"]
             break
     if Debug:
-        print(f'get_view_id: view_id: {vid}')
+        print(f"get_view_id: view_id: {vid}")
     return vid
 
-'''
+
+"""
 returns a dictionary of {'name': id} for the Top Level Domains
 
-'''
+"""
+
 
 def get_tlds():
     dd = dict()
     parms = {
-        'fields': 'name,id',
-        'orderBy': 'asc(name)',
-        'filter': "type:eq('Zone')",
+        "fields": "name,id",
+        "orderBy": "asc(name)",
+        "filter": "type:eq('Zone')",
     }
-    ll = get_collection_zones(ViewID, params=parms)
-    for l in ll:
-        dd[l['name']] = l['id']
+    zones = get_collection_zones(ViewID, params=parms)
+    for zone in zones:
+        dd[zone["name"]] = zone["id"]
     return dd
 
-'''
+
+"""
 
 Get all Zones associated with a given View
 
-'''
+"""
+
 
 def get_view_zones(vid, params={}):
     data = get_collection_zones(vid, params=params)
     return data
 
-'''
+
+"""
 Get all the zones in the given View and Config
 
-'''
+"""
+
 
 def get_all_zones(cid, vid):
     dd = dict()
     params = {
-        'limit': 5000,
-        'fields': 'absoluteName,id',
-        'filter': f"configuration.id:eq({cid}) and view.id:eq({vid}) and type:eq('Zone')",
+        "limit": 5000,
+        "fields": "absoluteName,id",
+        "filter": f"configuration.id:eq({cid}) and view.id:eq({vid}) and type:eq('Zone')",
     }
     zones = get_zones(params)
     for zone in zones:
-        dd[zone['absoluteName']] = zone['id']
+        dd[zone["absoluteName"]] = zone["id"]
     return dd
 
 
@@ -1839,16 +1942,18 @@ def get_all_leaf_zones():
     for zone in ViewZones:
         toks = zone.split(Dot)
         leaf = toks.pop(0)
-        if re.match('[1-9][0-9][0-9]', leaf):
+        if re.match("[1-9][0-9][0-9]", leaf):
             zlist.append(zone)
     return zlist
 
-'''
+
+"""
 if zone exists return its Zone ID
 else return False
 Does not create a Zone rather returns False if not there
 
-'''
+"""
+
 
 def is_zone(zone):
     if zone in ViewZones:
@@ -1856,22 +1961,25 @@ def is_zone(zone):
     else:
         return False
 
+
 def get_zone_id(zone):
     return is_zone(zone)
+
 
 def get_subzones(zid):
     dd = dict()
     params = {
-        'fields': 'name,id',
-        'orderBy': 'asc(name)',
-        'filter': "type:eq('Zone')",
+        "fields": "name,id",
+        "orderBy": "asc(name)",
+        "filter": "type:eq('Zone')",
     }
-    ll = get_collection_zones(zid, params=params)
-    for l in ll:
-        dd[l['name']] = l['id']
+    coll_zones = get_collection_zones(zid, params=params)
+    for zone in coll_zones:
+        dd[zone["name"]] = zone["id"]
     return dd
 
-'''
+
+"""
 [{'_links': {'accessRights': {'href': '/api/v2/zones/163800/accessRights'},
              'collection': {'href': '/api/v2/views/163799/zones'},
              'resourceRecords': {'href': '/api/v2/zones/163800/resourceRecords'},
@@ -1891,23 +1999,25 @@ def get_subzones(zid):
            'name': 'Azure',
            'type': 'View'}}]
 
-'''
+"""
+
 
 def get_exhost_zone_id(vid):
-#    data = get_view_zones(ViewID, params=params)
+    #    data = get_view_zones(ViewID, params=params)
     resp = _request(
-        'GET',
-        path=f'/views/{vid}/zones',
-        params = {'filter': "type:eq('ExternalHostsZone')"},
+        "GET",
+        path=f"/views/{vid}/zones",
+        params={"filter": "type:eq('ExternalHostsZone')"},
     )
     data = resp.json()
-    zones = data['data']
-    ex_id = zones[0]['id']
+    zones = data["data"]
+    ex_id = zones[0]["id"]
     if Debug:
-        print('get_exhost_zone_id: Zone ID: {ex_id}')
+        print("get_exhost_zone_id: Zone ID: {ex_id}")
     return ex_id
 
-'''
+
+"""
 Output:
     'count': 1,
      'data': [{'activeSessions': 6,
@@ -1917,84 +2027,85 @@ Output:
                'interfaceRedundancyEnabled': False,
                'type': 'SystemSettings',
                'version': '9.5.3-1036.GA.bcn'}]}
-'''
+"""
+
 
 def get_system_info():
     resp = _request(
-        'GET',
-        path = f'/settings',
-        params = {'filter': "type:eq('SystemSettings')"},
+        "GET",
+        path="/settings",
+        params={"filter": "type:eq('SystemSettings')"},
     )
-    data = resp.json()['data'][0]
+    data = resp.json()["data"][0]
     if Debug:
-        print(f'get_system_info:')
+        print("get_system_info:")
         pprint(data)
     return data
 
 
 def get_system_version():
     info = get_system_info()
-    version = info['version']
+    version = info["version"]
     if Debug:
-        print(f'get_system_version: {version}')
+        print(f"get_system_version: {version}")
     return version
 
 
-def _request(method, path, params=None, json=None):
+def _request(method, path, params=None, payload=None):
     global Sess, Header_Printed
 
-    url = f'https://{Base}/api/v2{path}'
+    url = f"https://{Base}/api/v2{path}"
     if Debug:
         if not Header_Printed:
-            print(f'_request: Session Header')
-            [print(f'{key}: {val}') for key,val in Sess.headers.items()]
+            print("_request: Session Header")
+            [print(f"{key}: {val}") for key, val in Sess.headers.items()]
             print()
             Header_Printed = True
         if params is not None:
-            print(f'_request: params: {params}')
-        if json is not None:
-            print(f'_request: json: {json}')
-#   resp = Sess.request(method, url, params=params, json=json, verify=Ca_bundle)
+            print(f"_request: parameters: {params}")
+        if payload is not None:
+            print(f"_request: json payload: {payload}")
     try:
-        resp = Sess.request(method, url, params=params, json=json, timeout=(5, 10))
+        resp = Sess.request(method, url, params=params, json=payload, timeout=(5, 10))
         resp.raise_for_status()
     except exceptions.HTTPError as http_err:
-        print(f'HTTP error status: {http_err}')
+        print(f"HTTP error status: {http_err}")
     except exceptions.ConnectionError as conn_err:
-        print(f'Connection error status: {conn_err}')
+        print(f"Connection error status: {conn_err}")
     except exceptions.ReadTimeout as read_timeout_err:
-        print(f'Read Timeout error status: {read_timeout_err}')
+        print(f"Read Timeout error status: {read_timeout_err}")
     except exceptions.Timeout as timeout_err:
-        print(f'Timeout error status: {timeout_err}')
+        print(f"Timeout error status: {timeout_err}")
     except exceptions.URLRequired as url_err:
-        print(f'Invalid URL error status: {url_err}')
+        print(f"Invalid URL error status: {url_err}")
     except exceptions.RequestException as err:
-        print(f'An error occurred status: {err}')
+        print(f"An error occurred status: {err}")
     else:
         if resp.ok:
             return resp
         else:
-            print(f'_request: return code: {resp.status_code}')
-            print(f'_request: url: {resp.url}')
-            print(f'_request method {resp.request.method}')
-            print(f'_request header {resp.request.headers}')
-            print(f'_request body {resp.request.body}')
-            print(f'_request response: {resp.text}')
+            print(f"_request: return code: {resp.status_code}")
+            print(f"_request: url: {resp.url}")
+            print(f"_request method {resp.request.method}")
+            print(f"_request header {resp.request.headers}")
+            print(f"_request body {resp.request.body}")
+            print(f"_request response: {resp.text}")
 
-def test(nm,z):
+
+def test(nm, z):
     params = {}
 
-    az_zone = 'privatelink.openai.azure.com'
-    hr_num = '434'
-    hr_num = '543'
-    hr_num = '278'
-    hname = f'q{hr_num}-txt-rr'
-    fqdn = f'{hname}.{hr_num}.{az_zone}'
+    az_zone = "privatelink.openai.azure.com"
+    hr_num = "434"
+    hr_num = "543"
+    hr_num = "278"
+    hname = f"q{hr_num}-txt-rr"
+    fqdn = f"{hname}.{hr_num}.{az_zone}"
 
-    zone = f'{hr_num}.{az_zone}'
-    zone = 'i.was.once.to'
+    zone = f"{hr_num}.{az_zone}"
+    zone = "i.was.once.to"
 
-    zid = get_zone_id(f'{hr_num}.{az_zone}')
+    zid = get_zone_id(f"{hr_num}.{az_zone}")
     data = get_zone_rrs(zid)
     pprint(data)
 
@@ -2009,26 +2120,26 @@ def test(nm,z):
         data = get_all_A_rrs(zid)
         if len(data):
             pprint(data)
-    data = delete_TXT_rr(fqdn, 'Brian Mulroney has been deceased!')
+    data = delete_TXT_rr(fqdn, "Brian Mulroney has been deceased!")
     pprint(data)
-    data = add_TXT_rr(fqdn, 'Brian Mulroney is now resurrected') 
+    data = add_TXT_rr(fqdn, "Brian Mulroney is now resurrected")
     pprint(data)
 
     data = get_hostname_addresses(fqdn)
-    data = add_Host_rr(f'q434-bozo-2.434.{az_zone}', '10.141.10.10')
+    data = add_Host_rr(f"q434-bozo-2.434.{az_zone}", "10.141.10.10")
     pprint(data)
 
-    data = add_A_rr(f'q434-test.434.{az_zone}', '10.141.15.15')
+    data = add_A_rr(f"q434-test.434.{az_zone}", "10.141.15.15")
     pprint(data)
 
     data = create_zone(az_zone)
-    data = create_hostrecord(f'hrec3.{z}', '10.141.10.5')
-    delete_network('10.141.10.0/24')
-    data = add_ipv4_network('10.141.1.0/24')
+    data = create_hostrecord(f"hrec3.{z}", "10.141.10.5")
+    delete_network("10.141.10.0/24")
+    data = add_ipv4_network("10.141.1.0/24")
     pprint(data)
-    data = add_ipv4_network('10.141.0.0/24')
+    data = add_ipv4_network("10.141.0.0/24")
 
-    params = {'fields': 'name,id,range,type'}
+    params = {"fields": "name,id,range,type"}
     data = get_collection_networks(BlockID, params=params)
     pprint(data)
 
@@ -2041,13 +2152,13 @@ def test(nm,z):
     pprint(data)
     data = get_ipv4_blocks(ConfID)
 
-    data = is_CNAME_rr('who.c.b.a.com')
+    data = is_CNAME_rr("who.c.b.a.com")
     zid = get_zone_id(z)
-    data = get_zone_rrs(zid, 'AliasRecord')
+    data = get_zone_rrs(zid, "AliasRecord")
     data = get_collection_blocks(ConfID, params=params)
     pprint(data)
 
-    data = create_alias_rr(f'who.{z}', 'www.quist.ca')
+    data = create_alias_rr(f"who.{z}", "www.quist.ca")
     pprint(data)
     get_confs()
     views = get_conf_views()
@@ -2059,26 +2170,21 @@ def test(nm,z):
     data = get_zone_info(ExHostZoneID, params=params)
     data = get_collection_zones(ViewID, params=params)
     data = get_rrs(ConfID, params)
-    data = create_ex_host('mary.woman.name.com')
+    data = create_ex_host("mary.woman.name.com")
 
-    create_ex_host('stan.kazy.person.org')
-    fqdn1 = f'{name}1.{zone}'
-    fqdn2 = f'{name}2.{zone}'
-    fqdn3 = f'{name}3.{zone}'
-    update_A_rr(fqdn1, '14.11.12.14')
-    delete_A_rr(fqdn3, '33.11.11.11')
+    create_ex_host("stan.kazy.person.org")
     zones = get_all_zones(ConfID, ViewID)
     pprint(zones)
-    print(f'Zone: {zone} exists? {is_zone(zone)}')
+    print(f"Zone: {zone} exists? {is_zone(zone)}")
     data = get_tlds()
     for dname in data:
         dd = get_subzones(data[dname])
-        print(f'Subzones of: {dname}')
+        print(f"Subzones of: {dname}")
         pprint(dd)
     zones = get_view_zones(ViewID)
     pprint(zones)
     for zone in zones:
-        zid = zone['id']
+        zid = zone["id"]
         rrs = get_zone_rrs(zid)
         pprint(rrs)
         print()
@@ -2089,59 +2195,64 @@ def test(nm,z):
     confs = get_confs()
     for conf in confs:
         print()
-        print(f'individual conf')
-        cnf = get_conf(conf['id'])
+        print("Individual Conf")
+        cnf = get_conf(conf["id"])
         pprint(cnf)
     confs = get_confs()
     for conf in confs:
-        cid = conf['id']
+        cid = conf["id"]
         data = get_conf_views(cid)
-        print(f'Conf ID: {cid} Views')
+        print(f"Conf ID: {cid} Views")
         pprint(data)
     views = get_views()
     for view in views:
-        vid = view['id']
+        vid = view["id"]
         print()
-        print(f'View List Item')
+        print("View List Item")
         print(view)
         print()
-        print(f'View: {vid}')
+        print(f"View: {vid}")
         data = get_view(vid)
         print(data)
 
-'''
+
+"""
 
 Does NOT create the zone component if it's not there
 
-'''
+"""
+
+
 def decouple(fqdn):
     toks = fqdn.split(Dot)
     name = toks.pop(0)
     zone = Dot.join(toks)
     zid = get_zone_id(zone)
-    return(name, zone, zid)
+    return (name, zone, zid)
+
 
 def main():
     return True
 
+
 def test2():
     global Debug
-    arglist= sys.argv[1:]
-#options
-    opts = 'hdvq'
-# longer options
-    long_opts = ['help', 'debug', 'verbose', 'quiet']
+    arglist = sys.argv[1:]
+    # options
+    opts = "hdvq"
+    # longer options
+    long_opts = ["help", "debug", "verbose", "quiet"]
     try:
         args, vals = getopt.getopt(arglist, opts, long_opts)
-        for cur_arg,cur_val in args:
-            if cur_arg in ['-h', '--help']:
-                print('This is a holding area for help information')
+        for cur_arg, cur_val in args:
+            if cur_arg in ["-h", "--help"]:
+                print("This is a holding area for help information")
                 exit()
-            elif cur_arg in ['-d', '--debug']:
+            elif cur_arg in ["-d", "--debug"]:
                 Debug = True
-            elif cur_arg in ['-v', '--verbose']:
+            elif cur_arg in ["-v", "--verbose"]:
                 Debug = True
-            elif cur_arg in ['-q', '--quiet']:
+            elif cur_arg in ["-q", "--quiet"]:
                 Debug = False
     except getopt.error as err:
         print(str(err))
@@ -2149,5 +2260,6 @@ def test2():
 
     basic_auth()
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     main()
