@@ -9,7 +9,7 @@ import getopt
 
 from contextlib import closing
 from datetime import datetime, timezone
-from pprint import pprint
+from rich import print
 from tqdm import tqdm
 
 import v2api
@@ -18,22 +18,12 @@ DB = "bc_dns_delta.db"
 Changed_zones = []
 Transaction_ids = []
 
-DEBUG = False
-
-"""
-cur.execute(
-"INSERT or IGNORE INTO last_run (run_id, run_isodate, run_unixtime) VALUES (1, ?, ?)", 
-(isodate, unixtime)
-)
-cur.execute(
-"UPDATE last_run SET run_isodate = ?, run_unixtime = ?  WHERE run_id = 1",
-(isodate, unixtime)
-)
-"""
+Debug = True
+Debug = False
 
 
-def update_last_run():
-    """write the current time into the database."""
+def update_last_change():
+    """ update last change to be now """
     idx = 1
     dt = datetime.now(timezone.utc)
     unixtime = int(dt.timestamp())
@@ -41,8 +31,8 @@ def update_last_run():
     with closing(sqlite3.connect(DB)) as con:
         with closing(con.cursor()) as cur:
             sql = """
-            INSERT into last_run (run_id, run_isodate, run_unixtime) VALUES (?, ?, ?)
-            ON CONFLICT(run_id) DO UPDATE SET run_isodate = excluded.run_isodate, run_unixtime = excluded.run_unixtime;
+            INSERT into last_change (run_id, last_change_isodate, last_change_unixtime) VALUES (?, ?, ?)
+            ON CONFLICT(run_id) DO UPDATE SET last_change_isodate = excluded.last_change_isodate, last_change_unixtime = excluded.last_change_unixtime;
             """
             cur.execute(sql, (idx, isodate, unixtime))
             con.commit()
@@ -133,6 +123,8 @@ def update_operations(act_id, ops):
     Transaction_ids.append(act_id)
     op_inserts = []
     for op in ops:
+        if Debug:
+            print(op)
         fupdates = op["fieldUpdates"]
         rr_id = op["resourceId"]
         bc_type = op["resourceType"]
@@ -186,21 +178,25 @@ def update_operations(act_id, ops):
             (act_id,rr_id,op_type,bc_type,rr_comment,rr_hname,rr_fqdn,rr_type,rr_value,rr_ttl)
             VALUES (?,?,?,?,?,?,?,?,?,?) 
             """
-            if DEBUG:
+            if Debug:
                 print(f"update_operations: sql query: {sql}")
                 print(op_inserts)
             cur.executemany(sql, op_inserts)
         con.commit()
 
 
-def fetch_last_run():
+def fetch_last_change():
+    Tau0 = '2024-12-17T12:00:00Z'
     """gets the last time stamp from the last run."""
     with closing(sqlite3.connect(DB)) as con:
         with closing(con.cursor()) as cur:
-            sql = "SELECT run_isodate from last_run WHERE run_id = 1"
+            sql = "SELECT last_change_isodate from last_change WHERE run_id = 1"
             row = cur.execute(sql).fetchone()
             con.commit()
-    return row[0]
+    if row is not None:
+        return row[0]
+    else:
+        return Tau0
 
 
 def get_isodate_now():
@@ -211,7 +207,7 @@ def get_isodate_now():
 
 def main():
     """lets go!"""
-    global DEBUG
+    global Debug
 
     arglist = sys.argv[1:]
     opts = "hdvq"
@@ -223,39 +219,39 @@ def main():
                 print("This is a holding area for help information")
                 sys.exit()
             elif cur_arg in ["-d", "--debug"]:
-                DEBUG = True
+                Debug = True
             elif cur_arg in ["-v", "--verbose"]:
-                DEBUG = True
+                Debug = True
             elif cur_arg in ["-q", "--quiet"]:
-                DEBUG = False
+                Debug = False
     except getopt.error as err:
         print(str(err))
         sys.exit()
 
-    v2api.Debug = DEBUG
+    v2api.Debug = Debug
 
     v2api.basic_auth()
     v2api.get_system_version()
-    then = fetch_last_run()
+    then = fetch_last_change()
     now = get_isodate_now()
     # all_acts = v2api.get_all_transactions(then, now)
-    # if DEBUG:
-    #     pprint(all_acts)
+    # if Debug:
+    #     print(all_acts)
     tactions = v2api.get_rr_transactions(then, now)
     for action in tqdm(tactions, leave=False):
-        if DEBUG:
-            pprint(action)
+        if Debug:
+            print(action)
         update_transactions(action)
         ops = v2api.get_transactions_operations(action["id"])
-        if DEBUG:
+        if Debug:
             print(f'action id: {action["id"]}')
             print("operations:")
-            pprint(ops)
+            print(ops)
         update_operations(action["id"], ops)
-    update_last_run()
-    update_log()
     if Changed_zones:
+        update_last_change()
         print(Changed_zones)
+    update_log()
 
 
 if __name__ == "__main__":

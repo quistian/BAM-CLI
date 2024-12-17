@@ -1,4 +1,4 @@
--- DROP TABLE IF EXISTS transactions;
+DROP TABLE IF EXISTS transactions;
 CREATE TABLE transactions (
     trans_id INTEGER PRIMARY KEY,
     act_id INTEGER UNIQUE,
@@ -9,13 +9,13 @@ CREATE TABLE transactions (
     trans_type TEXT,
     trans_user TEXT
 );
--- DROP TABLE IF EXISTS last_run;
-CREATE TABLE last_run (
+DROP TABLE IF EXISTS last_change;
+CREATE TABLE last_change (
     run_id INTEGER PRIMARY KEY,
-    run_isodate TEXT,
-    run_unixtime INTEGER
+    last_change_isodate TEXT,
+    last_change_unixtime INTEGER
 );
--- DROP TABLE IF EXISTS log;
+DROP TABLE IF EXISTS log;
 CREATE TABLE log (
     log_id INTEGER PRIMARY KEY,
     log_isodate TEXT NOT NULL,  -- ISO 8601 date format with milliseconds E.g. 2024-11-21T14:21:53+00:00
@@ -23,7 +23,7 @@ CREATE TABLE log (
     log_transaction_ids TEXT,   -- CSV representation of the transaction ids which occurred since the last scan
     log_changed_zones TEXT      -- CSV representation of changed zones since last scan
 );
--- DROP TABLE IF EXISTS operations;
+DROP TABLE IF EXISTS operations;
 CREATE TABLE operations (
     ops_id INTEGER PRIMARY KEY,
     act_id INTEGER,

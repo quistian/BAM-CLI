@@ -50,18 +50,27 @@ See:
 
 load_dotenv("/home/russ/.bamrc")
 
-Base = os.environ.get("BAM_DEV_ENDPT")
-URL = os.environ.get("BAM_DEV_APIv2_URL")
-Uname = os.environ.get("BAM_DEV_USER")
-Pw = os.environ.get("BAM_DEV_PW")
-Conf = os.environ.get("BAM_DEV_CONF")
-View = os.environ.get("BAM_DEV_VIEW")
-
-Ca_bundle = "/etc/ssl/Sectigo-AAA-chain.pem"
-
 Debug = True
 Debug = False
 Header_Printed = False
+
+Target = 'Dev'
+Target = 'Prod'
+
+if Target == 'Dev':
+    Base = os.environ.get("BAM_DEV_ENDPT")
+    Uname = os.environ.get("BAM_DEV_USER")
+    Pw = os.environ.get("BAM_DEV_PW")
+    Conf = os.environ.get("BAM_DEV_CONF")
+    View = os.environ.get("BAM_DEV_VIEW")
+elif Target == 'Prod':
+    Base = os.environ.get("BAM_ENDPOINT")
+    Uname = os.environ.get("BAM_USER")
+    Pw = os.environ.get("BAM_PW")
+    Conf = os.environ.get("BAM_CONF_AZ")
+    View = os.environ.get("BAM_VIEW_AZ")
+Ca_bundle = os.environ.get("BAM_CERT")
+
 
 Dot = "."
 CIDRBlock = "10.0.0.0/8"
@@ -719,7 +728,7 @@ def get_all_transactions(iso_start, iso_stop):
     return actions
 
 
-#        'filter': f"((creationDateTime:ge('{iso_start}') and creationDateTime:le('{iso_stop}')) and (operation:contains('GENERIC') or operation:contains('ALIAS')))",
+#        'filter': f"((creationDateTime:ge('{iso_start}') and creationDateTime:le('{iso_stop}')) and operation:contains('GENERIC')",
 #        'filter': f"creationDateTime:ge('{iso_start}') and creationDateTime:le('{iso_stop}') and operation:contains('GENERIC')",
 #        'filter': f"creationDateTime:ge('{iso_start}') and creationDateTime:le('{iso_stop}') and (description:contains('Generic') or description:contains('Alias'))",
 
@@ -735,8 +744,12 @@ def get_rr_transactions(iso_start, iso_stop):
             params = {
                 "offset": offset,
                 "limit": limit,
-                "fields": "comment,creationDateTime,description,id,operation,transactionType,type,user",
-                "filter": f"creationDateTime:ge('{iso_start}') and creationDateTime:le('{iso_stop}') and description:contains('Record')",
+                "fields":
+                "comment,creationDateTime,description,id,operation,transactionType,type,user",
+                "filter": f"user.name:eq('{Uname}') and \
+                creationDateTime:ge('{iso_start}') and \
+                creationDateTime:le('{iso_stop}') and \
+                (description:contains('Generic') or description:contains('Alias'))",
             },
         )
         data = resp.json()
