@@ -5,7 +5,7 @@
 import json
 import sys
 import sqlite3
-import getopt
+import argparse
 
 from contextlib import closing
 from datetime import datetime, timezone
@@ -17,9 +17,6 @@ import v2api
 DB = "bc_dns_delta.db"
 Changed_zones = []
 Transaction_ids = []
-
-Debug = True
-Debug = False
 
 
 def update_last_change():
@@ -206,9 +203,10 @@ def get_isodate_now():
 
 
 def main():
-    """lets go!"""
+    """ lets go! """
     global Debug
 
+    """
     arglist = sys.argv[1:]
     opts = "hdvq"
     long_opts = ["help", "debug", "verbose", "quiet"]
@@ -227,8 +225,57 @@ def main():
     except getopt.error as err:
         print(str(err))
         sys.exit()
+    """
+
+    parser = argparse.ArgumentParser(
+        prog='changed_zones.py',
+        description='Probes the BC database to find out which RRs have \
+        changed since the last time the program was run',
+        epilog='That is all folks',
+    )
+
+    parser.add_argument('--version', action='version', version='%(prog)s 0.1')
+    parser.add_argument('-c', '--count') # optional value
+    parser.add_argument('-d', '--debug', help='show data to assist in debugging', action='store_true') # on or off flag
+    parser.add_argument('--start', help='optional ISO date start time', type=str)
+    parser.add_argument('--stop',  help='optional ISO date stop time', type=str)
+
+    group = parser.add_mutually_exclusive_group()
+    group.add_argument('-v', '--verbose', help='increase the verbosity of the output', action='store_true')
+    group.add_argument('-q', '--quiet', help='make sure there is minimal output', action='store_true')
+
+    subparsers = parser.add_subparsers(help='sub command help')
+    parser_offset = subparsers.add_parser('offset', help='offset subcommand help')
+    parser_offset.add_argument('-s', '--seconds', type=int, default=0, help='number of seconds offset from now in the past')
+    parser_offset.add_argument('-m', '--minutes', type=int, default=0, help='number of minutes offset from now in the past')
+    parser_offset.add_argument('-H', '--hours', type=int, default=0, help='number of hours offset from now in the past')
+    parser_offset.add_argument('-d', '--days', type=int, default=0, help='number of days offset from now in the past')
+    parser_offset.add_argument('-M', '--months', type=int, default=0, help='number of months offset from now in the past')
+    parser_offset.add_argument('-y', '--years', type=int, default=0, help='number of years offset from now in the past')
+
+    args = parser.parse_args()
+
+    Debug = None
+    if args.debug:
+        Debug = 1
+    if args.quiet:
+        Debug = False
+    elif args.verbose:
+        Debug = True
+
+    offset = 0
+    offset += args.seconds
+    offset += args.minutes * 60
+    offset += args.hours * 3600
+    offset += args.days * 86400
+    offset += args.months * 2592000
+    offset += args.years * 946080000 
 
     v2api.Debug = Debug
+
+    print(Debug)
+    print(offset)
+    exit()
 
     v2api.basic_auth()
     v2api.get_system_version()

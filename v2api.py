@@ -734,6 +734,25 @@ def get_all_transactions(iso_start, iso_stop):
 
 
 def get_rr_transactions(iso_start, iso_stop):
+    """
+    Transaction data structure:
+        {
+          'comment': None,
+          'creationDateTime': '2024-11-19T19:09:47Z',
+          'description': 'Generic Record was added',
+          'id': 63263,
+          'operation': 'ADD_GENERIC_RECORD',
+          'transactionType': 'ADD',
+          'type': 'Transaction',
+          'user': {'_links': {'self': {'href': '/api/v2/users/108726'}},
+                   'id': 108726,
+                   'name': 'sutherl4',
+                   'type': 'User'}
+         }
+     Note that operation is an enumeration, whereas description,
+     So operation can not use the contains operation
+    """
+
     actions = []
     limit = 1000
     offset = 0
@@ -741,6 +760,7 @@ def get_rr_transactions(iso_start, iso_stop):
         resp = _request(
             "GET",
             "/transactions",
+            # (description:contains('Generic') or description:contains('Alias'))",
             params = {
                 "offset": offset,
                 "limit": limit,
@@ -749,7 +769,8 @@ def get_rr_transactions(iso_start, iso_stop):
                 "filter": f"user.name:eq('{Uname}') and \
                 creationDateTime:ge('{iso_start}') and \
                 creationDateTime:le('{iso_stop}') and \
-                (description:contains('Generic') or description:contains('Alias'))",
+                operation:in('ADD_GENERIC_RECORD', 'DELETE_GENERIC_RECORD', 'UPDATE_GENERIC_RECORD', \
+                'ADD_ALIAS_RECORD', 'DELETE_ALIAS_RECORD', 'UPDATE_ALIAS_RECORD')",
             },
         )
         data = resp.json()
