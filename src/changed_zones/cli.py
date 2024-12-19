@@ -5,19 +5,135 @@
 import json
 import sys
 import sqlite3
-import argparse
+from click import Choice, Context, argument, group, option, pass_context, echo
 
 from contextlib import closing
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from rich import print
 from tqdm import tqdm
 
-import v2api
+from changed_zones import v2api
 
 DB = "bc_dns_delta.db"
 Changed_zones = []
 Transaction_ids = []
+Now = datetime.now(timezone.utc)
+ISO_now = Now.strftime("%Y-%m-%dT%H:%M:%SZ")
+ISO_then = '1970-01-01T00:00:00Z'
 
+@group()
+@option(
+        "--verbose/--no-verbose",
+        default=False,
+        help="Show extra information"
+)
+@option(
+        "--debug/--no-debug",
+        default=False,
+        help="Help runtime code with debugging info",
+        )
+@pass_context
+def run(ctx: Context, verbose, debug):
+    ctx.obj = dict()
+    ctx.obj["DEBUG"] = debug
+    ctx.obj["VERBOSE"] = verbose
+    v2api.Debug = debug
+    if debug:
+        echo(f"action: {ctx.invoked_subcommand}")
+    v2api.basic_auth()
+
+@run.command()
+@pass_context
+@option(
+    "-s", "--seconds", "secs",
+    default=0,
+    type=int,
+    help="Number of seconds to offset in the past",
+)
+@option(
+    "-m", "--minute", "mins",
+    default=0,
+    type=int,
+    help="Number of minutes to offset in the past",
+)
+@option(
+    "-h", "--hours", "hrs",
+    default=0,
+    type=int,
+    help="Number of hours to offset in the past",
+)
+@option(
+    "-d", "--days", "days",
+    default=0,
+    type=int,
+    help="Number of days to offset in the past",
+)
+@option(
+    "-w", "--weeks", "wks",
+    default=0,
+    type=int,
+    help="Number of wks to offset in the past",
+)
+@option(
+    "-m", "--months", "mths",
+    default=0,
+    type=int,
+    help="Number of months to offset in the past",
+)
+@option(
+    "-y", "--years", "yrs",
+    default=0,
+    type=int,
+    help="Number of years to offset in the past",
+)
+def offset(ctx, secs, mins, hrs, days, wks, mths, yrs):
+    global ISO_then
+    years = timedelta(days=365*yrs)
+    months = timedelta(days=30*mths)
+    delta = timedelta(
+        weeks = wks,
+        days = days,
+        hours = hrs,
+        minutes = mins,
+        seconds = secs,
+        microseconds = 0
+    )
+    then = Now - years - months - delta
+    ISO_then = then.strftime("%Y-%m-%dT%H:%M:%SZ")
+    print(ISO_now, ISO_then)
+
+
+@run.command()
+@pass_context
+@option(
+    "--write",
+    is_flag=True
+)
+def from_last_change(ctx, write):
+    """ lets go! """
+    if ctx.obj["DEBUG"]:
+        print("Running from the last time a change was made")
+    v2api.get_system_version()
+    then = fetch_last_change()
+    now = get_isodate_now()
+    # all_acts = v2api.get_all_transactions(then, now)
+    # if Debug:
+    #     print(all_acts)
+    tactions = v2api.get_rr_transactions(then, now)
+    for action in tqdm(tactions, leave=False):
+        if Debug:
+            print(action)
+        update_transactions(action)
+        ops = v2api.get_transactions_operations(action["id"])
+        if Debug:
+            print(f'action id: {action["id"]}')
+            print("operations:")
+            print(ops)
+        update_operations(action["id"], ops)
+    if Changed_zones:
+        update_last_change()
+        print(Changed_zones)
+    update_log()
 
 def update_last_change():
     """ update last change to be now """
@@ -198,108 +314,10 @@ def fetch_last_change():
 
 def get_isodate_now():
     """get the current ISO date and time Zulu."""
-    tau_now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    Now = datetime.now(timezone.utc)
+    tau_now = Now.strftime("%Y-%m-%dT%H:%M:%SZ")
     return tau_now
 
 
-def main():
-    """ lets go! """
-    global Debug
-
-    """
-    arglist = sys.argv[1:]
-    opts = "hdvq"
-    long_opts = ["help", "debug", "verbose", "quiet"]
-    try:
-        args, vals = getopt.getopt(arglist, opts, long_opts)
-        for cur_arg, cur_val in args:
-            if cur_arg in ["-h", "--help"]:
-                print("This is a holding area for help information")
-                sys.exit()
-            elif cur_arg in ["-d", "--debug"]:
-                Debug = True
-            elif cur_arg in ["-v", "--verbose"]:
-                Debug = True
-            elif cur_arg in ["-q", "--quiet"]:
-                Debug = False
-    except getopt.error as err:
-        print(str(err))
-        sys.exit()
-    """
-
-    parser = argparse.ArgumentParser(
-        prog='changed_zones.py',
-        description='Probes the BC database to find out which RRs have \
-        changed since the last time the program was run',
-        epilog='That is all folks',
-    )
-
-    parser.add_argument('--version', action='version', version='%(prog)s 0.1')
-    parser.add_argument('-c', '--count') # optional value
-    parser.add_argument('-d', '--debug', help='show data to assist in debugging', action='store_true') # on or off flag
-    parser.add_argument('--start', help='optional ISO date start time', type=str)
-    parser.add_argument('--stop',  help='optional ISO date stop time', type=str)
-
-    group = parser.add_mutually_exclusive_group()
-    group.add_argument('-v', '--verbose', help='increase the verbosity of the output', action='store_true')
-    group.add_argument('-q', '--quiet', help='make sure there is minimal output', action='store_true')
-
-    subparsers = parser.add_subparsers(help='sub command help')
-    parser_offset = subparsers.add_parser('offset', help='offset subcommand help')
-    parser_offset.add_argument('-s', '--seconds', type=int, default=0, help='number of seconds offset from now in the past')
-    parser_offset.add_argument('-m', '--minutes', type=int, default=0, help='number of minutes offset from now in the past')
-    parser_offset.add_argument('-H', '--hours', type=int, default=0, help='number of hours offset from now in the past')
-    parser_offset.add_argument('-d', '--days', type=int, default=0, help='number of days offset from now in the past')
-    parser_offset.add_argument('-M', '--months', type=int, default=0, help='number of months offset from now in the past')
-    parser_offset.add_argument('-y', '--years', type=int, default=0, help='number of years offset from now in the past')
-
-    args = parser.parse_args()
-
-    Debug = None
-    if args.debug:
-        Debug = 1
-    if args.quiet:
-        Debug = False
-    elif args.verbose:
-        Debug = True
-
-    offset = 0
-    offset += args.seconds
-    offset += args.minutes * 60
-    offset += args.hours * 3600
-    offset += args.days * 86400
-    offset += args.months * 2592000
-    offset += args.years * 946080000 
-
-    v2api.Debug = Debug
-
-    print(Debug)
-    print(offset)
-    exit()
-
-    v2api.basic_auth()
-    v2api.get_system_version()
-    then = fetch_last_change()
-    now = get_isodate_now()
-    # all_acts = v2api.get_all_transactions(then, now)
-    # if Debug:
-    #     print(all_acts)
-    tactions = v2api.get_rr_transactions(then, now)
-    for action in tqdm(tactions, leave=False):
-        if Debug:
-            print(action)
-        update_transactions(action)
-        ops = v2api.get_transactions_operations(action["id"])
-        if Debug:
-            print(f'action id: {action["id"]}')
-            print("operations:")
-            print(ops)
-        update_operations(action["id"], ops)
-    if Changed_zones:
-        update_last_change()
-        print(Changed_zones)
-    update_log()
-
-
 if __name__ == "__main__":
-    main()
+    run()

@@ -1,0 +1,28 @@
+[project]
+name = "changed_zones"
+version = "0.0.1"
+description = "A package to list which BC zones have changed"
+requires-python = ">=3.8"
+dependencies = [
+    "click",
+    "requests",
+]
+readme = "README.md"
+authors = [
+    {name = "RPS", email = "russell.sutherland@utoronto.ca"},
+]
+keywords = ["BC", "BlueCat", "Azure"]
+license = {text = "BSD-3-Clause"}
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Programming Language :: Python :: 3",
+    "Environment :: Console",
+]
+
+[project.scripts]
+changed-zones = "changed_zones.cli:run"
+
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+

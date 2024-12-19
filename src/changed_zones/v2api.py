@@ -764,13 +764,14 @@ def get_rr_transactions(iso_start, iso_stop):
             params = {
                 "offset": offset,
                 "limit": limit,
-                "fields":
-                "comment,creationDateTime,description,id,operation,transactionType,type,user",
-                "filter": f"user.name:eq('{Uname}') and \
-                creationDateTime:ge('{iso_start}') and \
-                creationDateTime:le('{iso_stop}') and \
-                operation:in('ADD_GENERIC_RECORD', 'DELETE_GENERIC_RECORD', 'UPDATE_GENERIC_RECORD', \
-                'ADD_ALIAS_RECORD', 'DELETE_ALIAS_RECORD', 'UPDATE_ALIAS_RECORD')",
+                "fields": "comment,creationDateTime,description,id,operation,transactionType,type,user",
+                "filter": f"\
+                    user.name:eq('{Uname}') and \
+                    creationDateTime:ge('{iso_start}') and \
+                    creationDateTime:le('{iso_stop}') and \
+                    operation:in('ADD_GENERIC_RECORD', 'DELETE_GENERIC_RECORD', 'UPDATE_GENERIC_RECORD', \
+                    'ADD_ALIAS_RECORD', 'DELETE_ALIAS_RECORD', 'UPDATE_ALIAS_RECORD') \
+                    ",
             },
         )
         data = resp.json()
